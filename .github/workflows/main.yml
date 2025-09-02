@@ -1,0 +1,21 @@
+name: Deploy odoo17 🚀
+on: [push]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Deploy to Server
+      uses: easingthemes/ssh-deploy@main
+      with:
+        TARGET: /opt/odoo-17/ghoname
+        SSH_PRIVATE_KEY: ${{ secrets.TOP_ODOO_APPS }}
+        REMOTE_HOST: 185.193.17.179
+        REMOTE_USER: root
+        REMOTE_PORT: 22
+        SCRIPT_AFTER: |
+          sudo docker restart c310f20f1e56
