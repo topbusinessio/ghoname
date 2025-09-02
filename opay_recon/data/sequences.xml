@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!-- Opay Dummy ID Sequence -->
+        <record id="sequence_opay_id" model="ir.sequence">
+            <field name="name">Opay Dummy ID</field>
+            <field name="code">opay_recon.opay_id_sequence</field>
+            <field name="prefix">OPAY-DUMMY-</field>
+            <field name="padding">6</field>
+        </record>
+    </data>
+</odoo>

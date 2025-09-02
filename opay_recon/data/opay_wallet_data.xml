@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Sequence for Opay Wallet Account Number -->
+    <record id="seq_opay_wallet_account" model="ir.sequence">
+        <field name="name">Opay Wallet Account</field>
+        <field name="code">opay.wallet.account</field>
+        <field name="padding">7</field>
+        <field name="prefix">%(year)s</field>  <!-- Updated to use the current year -->
+    </record>
+
+    <!-- Menu items for Opay Wallet and Payments -->
+    <menuitem id="opay_wallet_root_menu" name="Opay Wallet" web_icon="opay_wallet,static/description/icon.png"/>
+    
+    <record id="action_opay_wallet" model="ir.actions.act_window">
+        <field name="name">Opay Wallets</field>
+        <field name="res_model">opay.wallet</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <menuitem id="opay_wallet_menu" name="Wallets" parent="opay_wallet_root_menu" action="action_opay_wallet"/>
+    
+    <record id="action_opay_payment" model="ir.actions.act_window">
+        <field name="name">Opay Payments</field>
+        <field name="res_model">opay.payment</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <menuitem id="opay_payment_menu" name="Payments" parent="opay_wallet_root_menu" action="action_opay_payment"/>
+</odoo>

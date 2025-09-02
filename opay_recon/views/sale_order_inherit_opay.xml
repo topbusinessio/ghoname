@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="view_order_form_inherit_opay" model="ir.ui.view">
+        <field name="name">sale.order.form.inherit.opay</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_form"/>
+        <field name="arch" type="xml">
+
+            <!-- Wrap Delivery and Invoice addresses in a labeled group -->
+            <xpath expr="//field[@name='partner_shipping_id']" position="replace">
+                <group string="Customer Addresses">
+                    <field name="partner_shipping_id" string="Delivery Address"/>
+                    <field name="partner_invoice_id" string="Invoice Address"/>
+                </group>
+            </xpath>
+
+            <!-- Insert Opay Wallet fields right after the Delivery Address group -->
+            <xpath expr="//group[field[@name='partner_shipping_id']]" position="after">
+                <group string="Opay Wallet">
+                    <field name="partner_wallet_account_number" string="Wallet Number" readonly="1"/>
+                    <field name="partner_wallet_balance" string="Wallet Balance" readonly="1"/>
+                </group>
+            </xpath>
+
+        </field>
+    </record>
+</odoo>

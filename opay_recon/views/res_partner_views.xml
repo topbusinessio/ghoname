@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="res_partner_view_form_inherit_opay" model="ir.ui.view">
+        <field name="name">res.partner.view.form.inherit.opay</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='function']" position="after">
+                <group string="Opay Wallet Information">
+                    <field name="wallet_id" readonly="1" 
+                           help="The internal Opay wallet ID assigned to this partner."/>
+                    <field name="wallet_account_number" readonly="1" 
+                           help="The unique Opay wallet account number for this partner."/>
+                    <field name="wallet_balance" readonly="1" 
+                           help="The current balance in the partner's Opay wallet."/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>

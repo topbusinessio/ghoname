@@ -1,0 +1,28 @@
+<odoo>
+    <record id="view_partner_form_opay_custom" model="ir.ui.view">
+        <field name="name">res.partner.form.opay.custom</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="arch" type="xml">
+
+            <!-- Make Email field larger -->
+            <xpath expr="//field[@name='email']" position="attributes">
+                <attribute name="class">o_input_full_width o_col_12 o_field_email_large</attribute>
+                <attribute name="style">min-width:400px;</attribute>
+            </xpath>
+
+            <!-- Make Phone field larger -->
+            <xpath expr="//field[@name='phone']" position="attributes">
+                <attribute name="class">o_input_full_width o_col_12 o_field_phone_large</attribute>
+                <attribute name="style">min-width:300px;</attribute>
+            </xpath>
+
+            <!-- Make Mobile field larger -->
+            <xpath expr="//field[@name='mobile']" position="attributes">
+                <attribute name="class">o_input_full_width o_col_12 o_field_mobile_large</attribute>
+                <attribute name="style">min-width:300px;</attribute>
+            </xpath>
+
+        </field>
+    </record>
+</odoo>
