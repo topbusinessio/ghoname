@@ -16,7 +16,6 @@
                                     Configure your Opay API credentials and mode below.
                                 </div>
                                 <div class="content-group">
-
                                     <!-- Account Prefix Field -->
                                     <div class="mt16">
                                         <label for="opay_account_prefix" class="o_form_label"/>
@@ -26,34 +25,25 @@
                                         </div>
                                     </div>
 
-                                    <!-- Client Auth Key -->
+                                    <!-- API Key Field -->
                                     <div class="mt16">
-                                        <label for="opay_client_auth_key" class="o_form_label"/>
-                                        <field name="opay_client_auth_key" password="True" placeholder="Enter Opay Client Auth Key"/>
+                                        <label for="opay_api_key" class="o_form_label"/>
+                                        <field name="opay_api_key" placeholder="Enter Opay API Key"/>
                                         <div class="o_form_help">
-                                            The Client Authentication Key provided by Opay.
+                                            Enter the API key provided by Opay for authentication.
                                         </div>
                                     </div>
 
-                                    <!-- Merchant Private Key -->
+                                    <!-- Secret Key Field -->
                                     <div class="mt16">
-                                        <label for="opay_merchant_private_key" class="o_form_label"/>
-                                        <field name="opay_merchant_private_key" password="True" placeholder="Paste Merchant Private Key"/>
+                                        <label for="opay_secret_key" class="o_form_label"/>
+                                        <field name="opay_secret_key" placeholder="Enter Opay Secret Key"/>
                                         <div class="o_form_help">
-                                            Your RSA private key for signing requests.
+                                            Enter the secret key provided by Opay for secure transactions.
                                         </div>
                                     </div>
 
-                                    <!-- Opay Public Key -->
-                                    <div class="mt16">
-                                        <label for="opay_public_key" class="o_form_label"/>
-                                        <field name="opay_public_key" placeholder="Paste Opay Public Key"/>
-                                        <div class="o_form_help">
-                                            Opay's RSA public key for verifying and encrypting requests.
-                                        </div>
-                                    </div>
-
-                                    <!-- Merchant ID -->
+                                    <!-- Merchant ID Field -->
                                     <div class="mt16">
                                         <label for="opay_merchant_id" class="o_form_label"/>
                                         <field name="opay_merchant_id" placeholder="Enter Opay Merchant ID"/>
@@ -67,18 +57,18 @@
                                         <label for="opay_test_mode" class="o_form_label"/>
                                         <field name="opay_test_mode"/>
                                         <div class="o_form_help">
-                                            Enable Test Mode to generate dummy accounts and avoid live API calls.
+                                            Enable Test Mode to generate dummy accounts and use sandbox environment.
                                         </div>
                                     </div>
 
                                     <!-- Test Credentials Button -->
                                     <div class="mt16">
-                                        <button name="test_opay_connection"
+                                        <button name="validate_live_credentials"
                                                 type="object"
-                                                string="Test Connection"
+                                                string="Test Live Credentials"
                                                 class="btn-primary"/>
                                         <div class="o_form_help">
-                                            Validate your Opay credentials. Errors and payload info will display in messages.
+                                            Validate your live credentials without creating wallets. Errors and payload info will display in messages.
                                         </div>
                                     </div>
 

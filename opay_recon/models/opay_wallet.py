@@ -3,184 +3,26 @@ import logging
 import random
 import string
 import requests
+import hashlib
+import hmac
 import json
 import time
-import base64
 from odoo import models, fields, api
 from odoo.exceptions import UserError
 
-# --- Opay RSA-related imports ---
-from Crypto.Cipher import PKCS1_v1_5
-from Crypto.Hash import SHA256
-from Crypto.PublicKey import RSA
-from Crypto.Signature import pkcs1_15
-
 _logger = logging.getLogger(__name__)
-
-# --- Opay RSA Utility Functions (from Opay Python demo) ---
-
-MAX_DECRYPT_TYPE = 128
-MAX_ENCRYPT_BYTE = 117
-
-def _json_dumps(json_data):
-    """
-    Dumps a dictionary to a sorted JSON string.
-    """
-    return json.dumps(json_data, sort_keys=True, separators=(',', ':'))
-
-def _encrypt_by_public_key(input_str, public_key):
-    """
-    Encrypts content with a public key.
-    :param input_str: Content to encrypt.
-    :param public_key: Public key string (base64 encoded).
-    :return: Encrypted ciphertext (base64 encoded string).
-    """
-    rsa_key_bytes = base64.b64decode(public_key)
-    key = RSA.import_key(rsa_key_bytes)
-    cipher = PKCS1_v1_5.new(key)
-    input_bytes = input_str.encode()
-    input_length = len(input_bytes)
-    offset = 0
-    result_bytes = bytearray()
-    while input_length - offset > 0:
-        if input_length - offset > MAX_ENCRYPT_BYTE:
-            cache = cipher.encrypt(input_bytes[offset:offset + MAX_ENCRYPT_BYTE])
-            offset += MAX_ENCRYPT_BYTE
-        else:
-            cache = cipher.encrypt(input_bytes[offset:])
-            offset = input_length
-        result_bytes.extend(cache)
-    return base64.b64encode(result_bytes).decode()
-
-def _decrypt_by_private_key(text, private_key):
-    """
-    Decrypts ciphertext with a private key.
-    :param text: Ciphertext (base64 encoded).
-    :param private_key: Private key string (base64 encoded).
-    :return: Decrypted plaintext string.
-    """
-    key_bytes = base64.b64decode(private_key)
-    key = RSA.import_key(key_bytes)
-    cipher = PKCS1_v1_5.new(key)
-    encrypted_data = base64.b64decode(text)
-    input_len = len(encrypted_data)
-    out = bytearray()
-    offset = 0
-    i = 0
-    while input_len - offset > 0:
-        if input_len - offset > MAX_DECRYPT_TYPE:
-            cache = cipher.decrypt(encrypted_data[offset:offset + MAX_DECRYPT_TYPE], None)
-        else:
-            cache = cipher.decrypt(encrypted_data[offset:], None)
-        out.extend(cache)
-        i += 1
-        offset = i * MAX_DECRYPT_TYPE
-    return out.decode()
-
-def _generate_sign(data, private_key):
-    """
-    Generates a signature for the given data using a private key.
-    :param data: Data to sign.
-    :param private_key: Private key string (base64 encoded).
-    :return: Signature (base64 encoded string).
-    """
-    key_bytes = base64.b64decode(private_key)
-    rsa_key = RSA.import_key(key_bytes)
-    signer = pkcs1_15.new(rsa_key)
-    digest = SHA256.new(data.encode('utf-8'))
-    signature = signer.sign(digest)
-    return base64.b64encode(signature).decode('utf-8')
-
-def _verify_signature(data, signature, public_key):
-    """
-    Verifies a signature using a public key.
-    :param data: Data to verify.
-    :param signature: Signature to verify (base64 encoded).
-    :param public_key: Public key string (base64 encoded).
-    :return: True if the signature is valid, False otherwise.
-    """
-    try:
-        key_bytes = base64.b64decode(public_key)
-        rsa_key = RSA.import_key(key_bytes)
-        verifier = pkcs1_15.new(rsa_key)
-        hashed_data = SHA256.new(data.encode('utf-8'))
-        verifier.verify(hashed_data, base64.b64decode(signature))
-        return True
-    except Exception:
-        return False
-
-def _signature_content(response_content):
-    """
-    Generates the signature content string from a response dictionary.
-    """
-    res_data = {
-        'code': response_content['code'],
-        'message': response_content['message'],
-        'data': response_content['data'],
-        'timestamp': response_content['timestamp'],
-    }
-    sorted_params = dict(sorted(res_data.items()))
-    content = []
-    keys = list(sorted_params.keys())
-    keys.sort()
-    for key in keys:
-        value = sorted_params[key]
-        if key is None or key == "" or key == "sign":
-            continue
-        if value is None:
-            continue
-        content.append(f"{key}={value}")
-    return "&".join(content)
-
-def _analytic_response(response_content, merchant_private_key, opay_public_key):
-    """
-    Analyses Opay's API response, verifies signature, and decrypts the data.
-    :raises UserError: If the response code is not '00000' or signature verification fails.
-    """
-    if response_content.get('code') != '00000':
-        error_msg = response_content.get('message', 'Unknown error from Opay.')
-        error_code = response_content.get('code', 'N/A')
-        raise UserError(f"Opay API call failed. Code: {error_code}, Message: {error_msg}")
-    
-    enc_text = response_content.get('data')
-    if not enc_text:
-        raise UserError("Opay API response data is missing.")
-    
-    # Verify signature
-    sign_content = _signature_content(response_content)
-    sign = response_content.get('sign')
-    is_verified = _verify_signature(sign_content, sign, opay_public_key)
-    if not is_verified:
-        raise UserError("Opay API signature verification failed.")
-    
-    # Decrypt response data
-    return _decrypt_by_private_key(enc_text, merchant_private_key)
 
 # --- Opay Configuration ---
 class OpayConfig(models.Model):
     _name = 'opay.config'
     _description = 'Opay Configuration'
-    _inherit = 'res.config.settings'
 
-    # Note: These fields replace the previous `opay_api_key` and `opay_secret_key`
-    client_auth_key = fields.Char(string='Client Auth Key', required=True)
-    merchant_private_key = fields.Char(string='Merchant Private Key', required=True,
-                                        help="Your RSA private key, used for signing requests and decrypting responses.")
-    opay_public_key = fields.Char(string='Opay Public Key', required=True,
-                                    help="Opay's RSA public key, used for verifying their signatures and encrypting requests.")
+    opay_api_key = fields.Char(string='Opay API Key', required=True)
+    opay_secret_key = fields.Char(string='Opay Secret Key', required=True)
     opay_merchant_id = fields.Char(string='Opay Merchant ID', required=True)
     account_prefix = fields.Char(string='Account Prefix', default='OPAY',
-                                    help="Prefix for generated virtual accounts.")
+                                 help="Prefix for generated virtual accounts.")
     is_test_mode = fields.Boolean(string='Test Mode', default=False)
-    
-    def set_values(self):
-        super(OpayConfig, self).set_values()
-        self.env['ir.config_parameter'].sudo().set_param('opay.client_auth_key', self.client_auth_key)
-        self.env['ir.config_parameter'].sudo().set_param('opay.merchant_private_key', self.merchant_private_key)
-        self.env['ir.config_parameter'].sudo().set_param('opay.opay_public_key', self.opay_public_key)
-        self.env['ir.config_parameter'].sudo().set_param('opay.opay_merchant_id', self.opay_merchant_id)
-        self.env['ir.config_parameter'].sudo().set_param('opay.account_prefix', self.account_prefix)
-        self.env['ir.config_parameter'].sudo().set_param('opay.is_test_mode', self.is_test_mode)
 
 # --- Opay Wallet ---
 class OpayWallet(models.Model):
@@ -192,102 +34,46 @@ class OpayWallet(models.Model):
     account_number = fields.Char(string='Deposit Code', readonly=True)
     balance = fields.Float(string='Balance', default=0.0, readonly=True)
     currency_id = fields.Many2one('res.currency', string='Currency', required=True,
-                                     default=lambda self: self.env.company.currency_id)
+                                  default=lambda self: self.env.company.currency_id)
     state = fields.Selection([
         ('draft', 'Draft'),
         ('active', 'Active'),
         ('suspended', 'Suspended'),
     ], default='draft', string='State')
 
-    def _opay_api_request(self, endpoint, request_content):
-        """
-        Generic helper to handle the full Opay API request lifecycle (encrypt, sign, call, decrypt, verify).
-        """
-        params = self.env['ir.config_parameter'].sudo()
-        client_auth_key = params.get_param('opay.client_auth_key', default='')
-        merchant_private_key = params.get_param('opay.merchant_private_key', default='')
-        opay_public_key = params.get_param('opay.opay_public_key', default='')
-        
-        missing = []
-        if not client_auth_key: missing.append("Client Auth Key")
-        if not merchant_private_key: missing.append("Merchant Private Key")
-        if not opay_public_key: missing.append("Opay Public Key")
-        if missing:
-            raise UserError(f"Missing Opay configuration parameter(s): {', '.join(missing)}. "
-                            "Please configure them under `Settings > General Settings`.")
-
-        timestamp = str(int(time.time() * 1000))
-        
-        # 1. Encrypt the request parameters using Opay's public key
-        param_content = _encrypt_by_public_key(_json_dumps(request_content), opay_public_key)
-        
-        # 2. Sign the `paramContent` + `timestamp` string with your private key
-        sign_string = param_content + timestamp
-        signature = _generate_sign(sign_string, merchant_private_key)
-        
-        # 3. Build the final request body and headers
-        request_body = {
-            "paramContent": param_content,
-            "sign": signature,
-        }
-        
-        headers = {
-            "clientAuthKey": client_auth_key,
-            "version": "V1.0.1",
-            "bodyFormat": "JSON",
-            "timestamp": timestamp,
-        }
-
-        api_url = f"https://payapi.opayweb.com/api/v2/third/depositcode/{endpoint}"
-
-        try:
-            _logger.info("🔹 Opay Request URL: %s", api_url)
-            _logger.info("🔹 Opay Request Headers: %s", headers)
-            _logger.info("🔹 Opay Request Body: %s", request_body)
-            
-            response = requests.post(api_url, json=request_body, headers=headers, timeout=15)
-            response.raise_for_status()
-            response_json = response.json()
-            
-            _logger.info("✅ Opay API Response (raw): %s", json.dumps(response_json, indent=2))
-            
-            # 4. Analyze, verify, and decrypt the response
-            decrypted_data = _analytic_response(response_json, merchant_private_key, opay_public_key)
-            _logger.info("✅ Opay API Response (decrypted): %s", decrypted_data)
-            
-            return json.loads(decrypted_data)
-
-        except requests.exceptions.RequestException as e:
-            _logger.error("❌ Connection error to Opay: %s", str(e))
-            raise UserError(f"Connection to Opay API failed: {str(e)}")
-        except Exception as e:
-            _logger.error("❌ Unexpected error during API call: %s", str(e))
-            raise UserError(f"Unexpected error occurred with Opay API: {str(e)}")
-
-
     @api.model
     def _create_virtual_account(self, customer):
-        """
-        Creates a new Opay static deposit code for a customer using the API.
-        """
+        _logger.info("Creating Opay deposit account for customer: %s", customer.name)
+
         params = self.env['ir.config_parameter'].sudo()
-        merchant_id = params.get_param('opay.opay_merchant_id', default='')
-        is_test_mode = params.get_param('opay.is_test_mode') == 'True'
-        
-        if is_test_mode:
-            account_prefix = params.get_param('opay.account_prefix', default='OPAY')
+        account_prefix = params.get_param('opay_wallet.account_prefix', default='OPAY')
+        client_auth_key = params.get_param('opay_wallet.opay_api_key', default='')
+        secret_key = params.get_param('opay_wallet.opay_secret_key', default='')
+        merchant_id = params.get_param('opay_wallet.opay_merchant_id', default='')
+        test_mode = params.get_param('opay_wallet.is_test_mode') == 'True'
+
+        if test_mode:
             random_number = str(random.randint(1000000000, 9999999999))
-            generated_account = f"{account_prefix}-{random_number}"
+            generated_account = f"{account_prefix}{random_number}"
             _logger.info("Test mode: generated dummy account %s", generated_account)
             return generated_account
-            
-        if not merchant_id:
-            raise UserError("Missing Opay Merchant ID. Please configure it.")
-        
-        phone = customer.phone.replace(" ", "").replace("+", "") if customer.phone else ""
-        if phone and not phone.isdigit():
-            raise UserError(f"Invalid phone number format for {customer.name}: {customer.phone}")
-            
+
+        missing = []
+        if not client_auth_key: missing.append("API Key")
+        if not secret_key: missing.append("Secret Key")
+        if not merchant_id: missing.append("Merchant ID")
+        if not customer.name: missing.append("Customer Name")
+        if missing:
+            raise UserError(f"Missing required parameter(s): {', '.join(missing)}")
+
+        phone = ""
+        if customer.phone:
+            phone = customer.phone.replace(" ", "").replace("+", "")
+            if phone.startswith("0"):
+                phone = "234" + phone[1:]
+            if not phone.isdigit():
+                raise UserError(f"Invalid phone number format for {customer.name}: {customer.phone}")
+
         ref_id = ''.join(random.choices(string.ascii_letters + string.digits, k=15))
 
         biz_payload = {
@@ -301,16 +87,60 @@ class OpayWallet(models.Model):
             biz_payload["phone"] = phone
         if customer.email:
             biz_payload["email"] = customer.email
-            
-        # Call the new generic API request method
-        response_data = self._opay_api_request('generateStaticDepositCode', biz_payload)
+
+        # --- Prepare paramContent ---
+        param_content = json.dumps(biz_payload, separators=(',', ':'), sort_keys=True)
+
+        # --- ✅ FIXED: Correct HMAC-SHA512 signing with proper order ---
+        timestamp = str(int(time.time() * 1000))
+        sign_string = param_content + client_auth_key + timestamp  # ✅ Corrected order
+        signature = hmac.new(secret_key.encode(), sign_string.encode(), hashlib.sha512).hexdigest()
+
+        # ✅ FIXED: Remove clientAuthKey from payload body
+        payload = {
+            "version": "V1.0.1",
+            "bodyFormat": "JSON",
+            "timestamp": timestamp,
+            "signType": "SHA512",
+            "sign": signature,
+            "paramContent": param_content
+        }
+
+        # ✅ FIXED: Add clientAuthKey to headers instead
+        headers = {
+            "Content-Type": "application/json",
+            "clientAuthKey": client_auth_key  # This should be in headers, not body
+        }
         
-        if response_data.get('depositCode'):
-            account_number = response_data['depositCode']
-            _logger.info("✅ Opay deposit account successfully created: %s", account_number)
-            return account_number
-        else:
-            raise UserError("API response was successful but missing 'depositCode'.")
+        api_url = "https://payapi.opayweb.com/api/v2/third/depositcode/generateStaticDepositCode"
+
+        try:
+            _logger.info("🔹 Opay Headers: %s", {k: v[:10] + "..." if len(v) > 10 else v for k, v in headers.items()})
+            _logger.info("🔹 Opay Payload: %s", json.dumps(payload, indent=4))
+            _logger.info("🔹 Sign String: %s", f"{param_content[:50]}...{client_auth_key[:10]}...{timestamp}")
+            
+            response = requests.post(api_url, json=payload, headers=headers, timeout=15)
+            response.raise_for_status()
+            data = response.json()
+
+            _logger.info("🔹 Opay API Response: %s", json.dumps(data, indent=2))
+
+            if data.get("code") == "00000" and data.get("data", {}).get("depositCode"):
+                account_number = data["data"]["depositCode"]
+                _logger.info("✅ Opay deposit account successfully created: %s", account_number)
+                return account_number
+            else:
+                error_msg = data.get("message", "Unknown error")
+                error_code = data.get("code", "Unknown")
+                _logger.error("❌ Opay API error: %s (code: %s)", error_msg, error_code)
+                raise UserError(f"❌ Opay API error: {error_msg} (code: {error_code})")
+
+        except requests.exceptions.RequestException as e:
+            _logger.error("❌ Connection error: %s", str(e))
+            raise UserError(f"❌ Connection to Opay API failed: {str(e)}")
+        except Exception as e:
+            _logger.error("❌ Unexpected error: %s", str(e))
+            raise UserError(f"❌ Unexpected error occurred: {str(e)}")
 
     @api.model
     def create(self, vals):
