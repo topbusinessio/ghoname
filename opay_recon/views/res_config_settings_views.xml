@@ -81,7 +81,7 @@
         </field>
     </record>
 
-    <!-- Action and Menu items for the configuration -->
+    <!-- Action and Menu items for the configurationn-->
     <record id="opay_config_settings_action" model="ir.actions.act_window">
         <field name="name">Opay Configuration</field>
         <field name="res_model">res.config.settings</field>
