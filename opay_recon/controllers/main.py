@@ -1,11 +1,9 @@
-# -*- coding: utf-8 -*-
-import json
-import logging
 from odoo import http
 from odoo.http import request
-
-# Import the utility functions from the models file for signature verification
-from odoo.addons.opay_recon.models.opay_recon import _signature_content, _verify_signature
+import json
+import logging
+import hashlib
+import hmac
 
 _logger = logging.getLogger(__name__)
 
@@ -17,15 +15,6 @@ class OpayWebhookController(http.Controller):
             payload = kwargs
             _logger.info("Received OPay webhook payload: %s", json.dumps(payload, indent=2))
 
-            # Fetch the signature from the request headers
-            signature = request.httprequest.headers.get('X-Signature', '')
-            
-            # --- Signature Verification ---
-            # Verify the webhook's authenticity using Opay's public key
-            if not self._verify_opay_signature(payload, signature):
-                _logger.error("Failed to verify OPay webhook signature.")
-                return {'status': 'error', 'message': 'Invalid signature'}
-
             if 'data' not in payload or 'outOrderNo' not in payload['data']:
                 _logger.error("Invalid OPay webhook payload.")
                 return {'status': 'error', 'message': 'Invalid Payload'}
@@ -34,6 +23,13 @@ class OpayWebhookController(http.Controller):
             transaction_status = payment_data.get('status')
             out_order_no = payment_data.get('outOrderNo')
             amount = float(payment_data.get('amount', 0.0))
+
+            signature = request.httprequest.headers.get('X-Signature', '')
+            if not self._verify_signature(payload, signature):
+                return {'status': 'error', 'message': 'Invalid signature'}
+
+            # ... rest of your payment handling code ...
+
 
             # Handle successful payment
             if transaction_status == 'SUCCESS':
@@ -78,9 +74,9 @@ class OpayWebhookController(http.Controller):
             _logger.error("Error processing OPay webhook: %s", str(e))
             return {'status': 'error', 'message': 'Internal Server Error'}
 
-    def _verify_opay_signature(self, payload, signature):
+    def _verify_signature(self, payload, signature):
         """
-        Verifies the webhook signature from Opay using the Opay Public Key.
+        Verifies the webhook signature from Opay to ensure the payload is legitimate.
 
         Args:
             payload (dict): The parsed JSON payload sent by Opay.
@@ -89,16 +85,17 @@ class OpayWebhookController(http.Controller):
         Returns:
             bool: True if the signature matches, False otherwise.
         """
-        params = request.env['ir.config_parameter'].sudo()
-        opay_public_key = params.get_param('opay.opay_public_key', default=False)
-        
-        if not opay_public_key:
-            _logger.error("Opay public key is missing from configuration. Cannot verify webhook signature.")
+        # Fetch the secret key for signature verification
+        opay_config = http.request.env['opay.config'].sudo().search([], limit=1)
+        secret_key = opay_config.opay_secret_key if opay_config else None
+
+        if not secret_key:
+            _logger.error("Opay secret key is missing.")
             return False
 
-        # The signature content for webhooks is the raw JSON body
-        # excluding the 'sign' field if present.
-        # This matches the `_signature_content` function's logic.
-        sign_content = _signature_content(payload)
-        
-        return _verify_signature(sign_content, signature, opay_public_key)
+        # Generate the signature from the payload
+        payload_str = json.dumps(payload, separators=(',', ':'))
+        calculated_signature = hmac.new(secret_key.encode(), payload_str.encode(), hashlib.sha256).hexdigest()
+
+        # Compare the calculated signature with the provided signature
+        return hmac.compare_digest(calculated_signature, signature)
