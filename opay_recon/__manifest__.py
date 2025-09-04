@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Opay Wallet Generation',
-    'version': '1.0',
+    'version': '1.1',
     'category': 'Accounting',
     'summary': 'Automates Opay wallet generation, payments, and reconciliation',
     'description': """
