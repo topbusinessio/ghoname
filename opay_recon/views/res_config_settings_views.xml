@@ -23,7 +23,7 @@
                                     <!-- Client Auth Key -->
                                     <div class="mt16">
                                         <label for="opay_client_auth_key" class="o_form_label"/>
-                                        <field name="opay_client_auth_key"
+                                        <field name="opay_client_auth_key" optional="1"
                                                placeholder="Enter Opay Client Auth Key"/>
                                         <div class="o_form_help">
                                             The Client Auth Key provided by Opay for API authentication.
@@ -33,7 +33,7 @@
                                     <!-- Merchant Private Key -->
                                     <div class="mt16">
                                         <label for="opay_merchant_private_key" class="o_form_label"/>
-                                        <field name="opay_merchant_private_key"
+                                        <field name="opay_merchant_private_key" optional="1"
                                                widget="text"
                                                placeholder="Paste Opay Merchant Private Key"/>
                                         <div class="o_form_help">
@@ -46,7 +46,7 @@
                                     <!-- Opay Public Key -->
                                     <div class="mt16">
                                         <label for="opay_public_key" class="o_form_label"/>
-                                        <field name="opay_public_key"
+                                        <field name="opay_public_key" optional="1"
                                                widget="text"
                                                placeholder="Paste Opay Public Key"/>
                                         <div class="o_form_help">
@@ -57,7 +57,7 @@
                                     <!-- Merchant ID -->
                                     <div class="mt16">
                                         <label for="opay_merchant_id" class="o_form_label"/>
-                                        <field name="opay_merchant_id"
+                                        <field name="opay_merchant_id" optional="1"
                                                placeholder="Enter Opay Merchant ID"/>
                                         <div class="o_form_help">
                                             Merchant ID assigned by Opay. Required for live transactions.
@@ -67,7 +67,7 @@
                                     <!-- Account Prefix -->
                                     <div class="mt16">
                                         <label for="opay_account_prefix" class="o_form_label"/>
-                                        <field name="opay_account_prefix"
+                                        <field name="opay_account_prefix" optional="1"
                                                placeholder="Account prefix (e.g., OPAY)"/>
                                         <div class="o_form_help">
                                             The prefix for generated wallet account numbers.
@@ -77,7 +77,7 @@
                                     <!-- Test Mode -->
                                     <div class="mt16">
                                         <label for="opay_test_mode" class="o_form_label"/>
-                                        <field name="opay_test_mode"/>
+                                        <field name="opay_test_mode" optional="1"/>
                                         <div class="o_form_help">
                                             Enable Test Mode to use sandbox credentials instead of live ones.
                                         </div>
