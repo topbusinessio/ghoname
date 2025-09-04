@@ -10,7 +10,7 @@ import hashlib
 from odoo import models, fields, api
 from odoo.exceptions import UserError
 
-# --- Opay RSA-related imports ---
+# --- Opay RSA-related importss ---
 from Crypto.Cipher import PKCS1_v1_5
 from Crypto.PublicKey import RSA
 
