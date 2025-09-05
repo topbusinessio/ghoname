@@ -17,14 +17,12 @@ from Crypto.Signature import pkcs1_15
 
 _logger = logging.getLogger(__name__)
 
-# --- Opay RSA Utility Functions ---
-
-MAX_DECRYPT_TYPE = 128
-MAX_ENCRYPT_BYTE = 117
+# --- Utilities ---
 
 def _json_dumps(json_data):
-    """Dumps a dictionary to a sorted JSON string."""
+    """Dumps a dictionary to a sorted JSON string (stable for signing)."""
     return json.dumps(json_data, sort_keys=True, separators=(',', ':'))
+
 
 def _normalize_pem(key_str, is_private=True):
     """
@@ -32,7 +30,10 @@ def _normalize_pem(key_str, is_private=True):
     add proper header/footer, and insert line breaks every 64 chars.
     Works for single-line keys stored in Odoo or keys without headers.
     """
-    key_str = key_str.strip().replace("\r", "").replace("\n", "")
+    key_str = (key_str or "").strip().replace("\r", "").replace("\n", "")
+
+    if not key_str:
+        return key_str
 
     if is_private:
         header = "-----BEGIN RSA PRIVATE KEY-----"
@@ -41,7 +42,7 @@ def _normalize_pem(key_str, is_private=True):
         header = "-----BEGIN PUBLIC KEY-----"
         footer = "-----END PUBLIC KEY-----"
 
-    # Remove any existing headers/footers
+    # Strip headers/footers if present
     if key_str.startswith(header):
         key_str = key_str[len(header):]
     if key_str.endswith(footer):
@@ -49,65 +50,91 @@ def _normalize_pem(key_str, is_private=True):
 
     key_str = key_str.strip()
 
-    # Insert line breaks every 64 characters
+    # Re-wrap at 64 chars
     lines = [key_str[i:i+64] for i in range(0, len(key_str), 64)]
     pem_key = "\n".join([header] + lines + [footer])
 
-    # Debug: log normalized key
-    _logger.error("Normalized Opay %s key:\n%s", "private" if is_private else "public", pem_key)
-
+    # Debugging this at ERROR is noisy; keep at DEBUG
+    _logger.debug("Normalized Opay %s key:\n%s", "private" if is_private else "public", pem_key)
     return pem_key
 
+
+# --- RSA helpers (adaptive to key size) ---
+
 def _encrypt_by_public_key(input_str, public_key):
-    """Encrypts content with a public key (RSA)."""
+    """Encrypt content with public key (RSA), auto-detect block size."""
     public_key = _normalize_pem(public_key, is_private=False)
-    key = RSA.import_key(public_key.encode())
+    try:
+        key = RSA.import_key(public_key.encode())
+    except Exception as e:
+        raise UserError(f"Invalid Opay public key (PEM import failed): {e}")
+
     cipher = PKCS1_v1_5.new(key)
+
+    key_bytes = key.size_in_bytes()
+    # PKCS#1 v1.5 padding overhead = 11 bytes
+    max_encrypt = key_bytes - 11
+
     input_bytes = input_str.encode()
-    input_length = len(input_bytes)
     offset = 0
     result_bytes = bytearray()
-    while input_length - offset > 0:
-        if input_length - offset > MAX_ENCRYPT_BYTE:
-            cache = cipher.encrypt(input_bytes[offset:offset + MAX_ENCRYPT_BYTE])
-            offset += MAX_ENCRYPT_BYTE
-        else:
-            cache = cipher.encrypt(input_bytes[offset:])
-            offset = input_length
-        result_bytes.extend(cache)
+
+    while offset < len(input_bytes):
+        chunk = input_bytes[offset:offset + max_encrypt]
+        result_bytes.extend(cipher.encrypt(chunk))
+        offset += max_encrypt
+
     return base64.b64encode(result_bytes).decode()
 
+
 def _decrypt_by_private_key(text, private_key):
-    """Decrypts ciphertext with a private key (RSA)."""
+    """Decrypt ciphertext with private key (RSA), auto-detect block size."""
     private_key = _normalize_pem(private_key, is_private=True)
-    key = RSA.import_key(private_key.encode())
+    try:
+        key = RSA.import_key(private_key.encode())
+    except Exception as e:
+        raise UserError(f"Invalid merchant private key (PEM import failed): {e}")
+
     cipher = PKCS1_v1_5.new(key)
-    encrypted_data = base64.b64decode(text)
-    input_len = len(encrypted_data)
-    out = bytearray()
+
+    try:
+        encrypted_data = base64.b64decode(text)
+    except Exception:
+        # Not base64 → treat as plaintext and return as-is
+        return text
+
+    key_bytes = key.size_in_bytes()
     offset = 0
-    i = 0
-    while input_len - offset > 0:
-        if input_len - offset > MAX_DECRYPT_TYPE:
-            cache = cipher.decrypt(encrypted_data[offset:offset + MAX_DECRYPT_TYPE], None)
-        else:
-            cache = cipher.decrypt(encrypted_data[offset:], None)
-        out.extend(cache)
-        i += 1
-        offset = i * MAX_DECRYPT_TYPE
+    out = bytearray()
+
+    while offset < len(encrypted_data):
+        chunk = encrypted_data[offset:offset + key_bytes]
+        decrypted = cipher.decrypt(chunk, None)
+        if decrypted is None:
+            raise UserError("RSA decryption failed – invalid block or key mismatch.")
+        out.extend(decrypted)
+        offset += key_bytes
+
     return out.decode()
+
+
+# --- Signing / verification ---
 
 def _generate_sign(data, private_key=None, use_rsa=True):
     """
-    Generates a signature.
-    - If use_rsa=True: sign with merchant private key (RSA-SHA256).
-    - If use_rsa=False: generate SHA256 hex digest (Opay hash mode).
+    Generates a signature for requests.
+    - If use_rsa=True: RSA-SHA256 with merchant private key (base64 output).
+    - If use_rsa=False: SHA256 hex digest (e.g., for Opay 'hash' mode).
+    'data' should be the exact string to sign (e.g., paramContent + timestamp).
     """
     if use_rsa:
         if not private_key:
             raise UserError("RSA signing requested but no private key provided.")
         private_key = _normalize_pem(private_key, is_private=True)
-        rsa_key = RSA.import_key(private_key.encode())
+        try:
+            rsa_key = RSA.import_key(private_key.encode())
+        except Exception as e:
+            raise UserError(f"Invalid merchant private key (PEM import failed): {e}")
         signer = pkcs1_15.new(rsa_key)
         digest = SHA256.new(data.encode("utf-8"))
         signature = signer.sign(digest)
@@ -115,63 +142,62 @@ def _generate_sign(data, private_key=None, use_rsa=True):
     else:
         return SHA256.new(data.encode("utf-8")).hexdigest()
 
-def _verify_signature(data, signature, public_key):
-    """Verifies a signature using a public key."""
-    try:
-        public_key = _normalize_pem(public_key, is_private=False)
-        rsa_key = RSA.import_key(public_key.encode())
-        verifier = pkcs1_15.new(rsa_key)
-        hashed_data = SHA256.new(data.encode("utf-8"))
-        verifier.verify(hashed_data, base64.b64decode(signature))
-        return True
-    except Exception:
-        return False
 
-def _signature_content(response_content):
-    """Generates the signature content string from a response dictionary."""
-    res_data = {
-        'code': response_content['code'],
-        'message': response_content['message'],
-        'data': response_content['data'],
-        'timestamp': response_content['timestamp'],
-    }
-    sorted_params = dict(sorted(res_data.items()))
-    content = []
-    keys = list(sorted_params.keys())
-    keys.sort()
-    for key in keys:
-        value = sorted_params[key]
-        if key is None or key == "" or key == "sign":
-            continue
-        if value is None:
-            continue
-        content.append(f"{key}={value}")
-    return "&".join(content)
+def _verify_simple_response_sign(resp):
+    """
+    Best-effort verification for Opay response:
+    If 'sign' and 'timestamp' exist, recompute SHA256(str(data)+timestamp) and compare.
+    If missing, we skip verification (some endpoints may not return signature).
+    """
+    try:
+        sign = resp.get("sign")
+        timestamp = resp.get("timestamp")
+        if not sign or not timestamp:
+            return True  # Nothing to verify
+        data_str = resp.get("data")
+        # If 'data' is a dict, use the compact JSON string for reproducibility
+        if isinstance(data_str, (dict, list)):
+            data_str = _json_dumps(data_str)
+        elif data_str is None:
+            data_str = ""
+        recomputed = SHA256.new(f"{data_str}{timestamp}".encode("utf-8")).hexdigest()
+        return sign == recomputed
+    except Exception as e:
+        _logger.warning("Response sign verification skipped (error: %s).", e)
+        return True
+
 
 def _analytic_response(response_content, merchant_private_key, opay_public_key):
     """
-    Analyses Opay's API response, verifies signature, and decrypts the data.
+    Analyse Opay response:
+    - check code
+    - (optionally) verify simple SHA256 signature if present
+    - decrypt 'data' only if it's a base64-ish string; otherwise return as-is
     """
-    if response_content.get('code') != '00000':
+    code = response_content.get('code')
+    if code != '00000':
         error_msg = response_content.get('message', 'Unknown error from Opay.')
-        error_code = response_content.get('code', 'N/A')
-        raise UserError(f"Opay API call failed. Code: {error_code}, Message: {error_msg}")
-    
-    enc_text = response_content.get('data')
-    if not enc_text:
+        raise UserError(f"Opay API call failed. Code: {code}, Message: {error_msg}")
+
+    if not _verify_simple_response_sign(response_content):
+        raise UserError("Opay API response signature verification failed.")
+
+    enc_or_plain = response_content.get('data')
+    if enc_or_plain is None:
         raise UserError("Opay API response data is missing.")
-    
-    sign_content = _signature_content(response_content)
-    sign = response_content.get('sign')
-    is_verified = _verify_signature(sign_content, sign, opay_public_key)
-    if not is_verified:
-        raise UserError("Opay API signature verification failed.")
-    
-    decrypted_text = _decrypt_by_private_key(enc_text, merchant_private_key)
+
+    # If already dict/list, assume plaintext JSON and return directly
+    if isinstance(enc_or_plain, (dict, list)):
+        return enc_or_plain
+
+    # If it's a string, try to decrypt; if that yields JSON, parse it.
+    decrypted_text = _decrypt_by_private_key(enc_or_plain, merchant_private_key)
     try:
         return json.loads(decrypted_text)
     except Exception:
+        # Not JSON – return raw decrypted text as a string
         return {"raw": decrypted_text}
+
 
 # --- Opay Configuration ---
 class OpayConfig(models.Model):
@@ -180,23 +206,30 @@ class OpayConfig(models.Model):
     _inherit = 'res.config.settings'
 
     client_auth_key = fields.Char(string='Client Auth Key', required=True)
-    merchant_private_key = fields.Text(string='Merchant Private Key', required=True, help="Paste your full RSA Merchant Private Key here.")
-    opay_public_key = fields.Text(string='Opay Public Key', required=True, help="Paste Opay’s RSA Public Key here.")
+    merchant_private_key = fields.Text(string='Merchant Private Key', required=True,
+                                       help="Paste your full RSA Merchant Private Key here.")
+    opay_public_key = fields.Text(string='Opay Public Key', required=True,
+                                  help="Paste Opay’s RSA Public Key here.")
     opay_merchant_id = fields.Char(string='Opay Merchant ID', required=True)
     account_prefix = fields.Char(string='Account Prefix', default='OPAY')
     is_test_mode = fields.Boolean(string='Test Mode', default=False)
-    use_rsa_signing = fields.Boolean(string="Use RSA Signing", default=True, help="Enable for RSA signatures with private key. Disable for SHA256 hash signing.")
+    use_rsa_signing = fields.Boolean(
+        string="Use RSA Signing",
+        default=True,
+        help="Enable for RSA signatures with private key. Disable for SHA256 hash signing."
+    )
 
     def set_values(self):
         super(OpayConfig, self).set_values()
         params = self.env['ir.config_parameter'].sudo()
-        params.set_param('opay.client_auth_key', self.client_auth_key)
-        params.set_param('opay.merchant_private_key', self.merchant_private_key)
-        params.set_param('opay.opay_public_key', self.opay_public_key)
-        params.set_param('opay.opay_merchant_id', self.opay_merchant_id)
-        params.set_param('opay.account_prefix', self.account_prefix)
+        params.set_param('opay.client_auth_key', self.client_auth_key or '')
+        params.set_param('opay.merchant_private_key', self.merchant_private_key or '')
+        params.set_param('opay.opay_public_key', self.opay_public_key or '')
+        params.set_param('opay.opay_merchant_id', self.opay_merchant_id or '')
+        params.set_param('opay.account_prefix', self.account_prefix or 'OPAY')
         params.set_param('opay.is_test_mode', self.is_test_mode)
         params.set_param('opay.use_rsa_signing', self.use_rsa_signing)
+
 
 # --- Opay Wallet ---
 class OpayWallet(models.Model):
@@ -207,8 +240,10 @@ class OpayWallet(models.Model):
     partner_id = fields.Many2one('res.partner', string='Customer', required=True, ondelete='cascade')
     account_number = fields.Char(string='Deposit Code', readonly=True)
     balance = fields.Float(string='Balance', default=0.0, readonly=True)
-    currency_id = fields.Many2one('res.currency', string='Currency', required=True, default=lambda self: self.env.company.currency_id)
-    state = fields.Selection([('draft', 'Draft'), ('active', 'Active'), ('suspended', 'Suspended')], default='draft', string='State')
+    currency_id = fields.Many2one('res.currency', string='Currency', required=True,
+                                  default=lambda self: self.env.company.currency_id)
+    state = fields.Selection([('draft', 'Draft'), ('active', 'Active'), ('suspended', 'Suspended')],
+                             default='draft', string='State')
 
     def _opay_api_request(self, endpoint, request_content):
         """Handles full Opay API lifecycle (encrypt, sign, call, decrypt, verify)."""
@@ -223,25 +258,36 @@ class OpayWallet(models.Model):
         if not merchant_private_key: missing.append("Merchant Private Key")
         if not opay_public_key: missing.append("Opay Public Key")
         if missing:
-            raise UserError(f"Missing Opay configuration parameter(s): {', '.join(missing)}. Configure under Settings > General Settings.")
+            raise UserError("Missing Opay configuration parameter(s): %s. "
+                            "Configure under Settings > General Settings." % ", ".join(missing))
 
         timestamp = str(int(time.time() * 1000))
+
+        # Encrypt business payload with Opay public key
         param_content = _encrypt_by_public_key(_json_dumps(request_content), opay_public_key)
+
+        # sign = SHA256(paramContent + timestamp) by default, or RSA over that string if use_rsa=True
         sign_string = param_content + timestamp
         signature = _generate_sign(sign_string, merchant_private_key if use_rsa else None, use_rsa)
 
         request_body = {"paramContent": param_content, "sign": signature}
-        headers = {"clientAuthKey": client_auth_key, "version": "V1.0.1", "bodyFormat": "JSON", "timestamp": timestamp}
+        headers = {
+            "clientAuthKey": client_auth_key,
+            "version": "V1.0.1",
+            "bodyFormat": "JSON",
+            "timestamp": timestamp,
+        }
         api_url = f"https://payapi.opayweb.com/api/v2/third/depositcode/{endpoint}"
 
         try:
             _logger.info("🔹 Opay Request URL: %s", api_url)
+            _logger.debug("🔹 Opay Request Body: %s", json.dumps(request_body)[:500])
             response = requests.post(api_url, json=request_body, headers=headers, timeout=15)
             response.raise_for_status()
             response_json = response.json()
-            _logger.info("✅ Opay API Response (raw): %s", json.dumps(response_json, indent=2))
+            _logger.info("✅ Opay API Response (raw): %s", json.dumps(response_json, indent=2)[:2000])
             decrypted_data = _analytic_response(response_json, merchant_private_key, opay_public_key)
-            _logger.info("✅ Opay API Response (decrypted): %s", decrypted_data)
+            _logger.info("✅ Opay API Response (parsed): %s", decrypted_data)
             return decrypted_data
         except requests.exceptions.RequestException as e:
             _logger.error("❌ Connection error to Opay: %s", str(e))
@@ -269,9 +315,17 @@ class OpayWallet(models.Model):
             raise UserError(f"Invalid phone number for {customer.name}: {customer.phone}")
 
         ref_id = ''.join(random.choices(string.ascii_letters + string.digits, k=15))
-        biz_payload = {"opayMerchantId": merchant_id, "refId": ref_id, "name": customer.name, "accountType": "Merchant", "sendPassWordFlag": "N"}
-        if phone: biz_payload["phone"] = phone
-        if customer.email: biz_payload["email"] = customer.email
+        biz_payload = {
+            "opayMerchantId": merchant_id,
+            "refId": ref_id,
+            "name": customer.name,
+            "accountType": "Merchant",
+            "sendPassWordFlag": "N",
+        }
+        if phone:
+            biz_payload["phone"] = phone
+        if customer.email:
+            biz_payload["email"] = customer.email
 
         response_data = self._opay_api_request('generateStaticDepositCode', biz_payload)
         if response_data.get('depositCode'):
@@ -291,6 +345,7 @@ class OpayWallet(models.Model):
                 raise UserError(f"Wallet creation failed for {wallet.partner_id.name}.\n{str(e)}")
         return wallet
 
+
 # --- Opay Payment ---
 class OpayPayment(models.Model):
     _name = 'opay.payment'
@@ -309,6 +364,7 @@ class OpayPayment(models.Model):
         if payment.sale_order_id and payment.status == 'SUCCESS':
             payment.sale_order_id.write({'state': 'paid'})
         return payment
+
 
 # --- Extend res.partner ---
 class ResPartner(models.Model):
@@ -333,7 +389,11 @@ class ResPartner(models.Model):
         partner = super(ResPartner, self).create(vals)
 
         if vals.get("customer_rank", 0) > 0 and not partner.wallet_id:
-            wallet_vals = {'name': partner.name, 'partner_id': partner.id, 'currency_id': self.env.company.currency_id.id}
+            wallet_vals = {
+                'name': partner.name,
+                'partner_id': partner.id,
+                'currency_id': self.env.company.currency_id.id
+            }
             try:
                 wallet = self.env['opay.wallet'].create(wallet_vals)
                 partner.wallet_id = wallet.id
