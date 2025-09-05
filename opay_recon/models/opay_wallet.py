@@ -324,18 +324,22 @@ class OpayWallet(models.Model):
         if not merchant_id:
             raise UserError("Missing Opay Merchant ID. Please configure it in Opay Settings.")
 
-        # --- Enforce phone number validation ---
+        # --- Enforce a phone number OR email address ---
         phone = customer.phone.replace(" ", "").replace("+", "") if customer.phone else ""
-        if not phone:
-            raise UserError(f"Customer '{customer.name}' must have a valid phone number to create an Opay wallet.")
-        if not phone.isdigit():
-            raise UserError(f"Invalid phone number format for '{customer.name}': {customer.phone}. Please use digits only.")
-        # Opay expects a 13-digit Nigerian number (e.g., 234XXXXXXXXXX)
-        if phone.startswith("0"):
-            phone = "234" + phone[1:]
-        if not phone.startswith("234") or len(phone) != 13:
-            _logger.warning("Phone number '%s' for customer '%s' might not be in the expected Opay format (e.g., 234XXXXXXXXXX).", phone, customer.name)
+        email = customer.email.strip() if customer.email else ""
+        
+        # Opay API requires at least one of these.
+        if not phone and not email:
+            raise UserError(f"Customer '{customer.name}' must have a valid phone number or an email address to create an Opay wallet.")
 
+        # If a phone number exists, ensure it's in the correct format.
+        if phone:
+            if not phone.isdigit():
+                raise UserError(f"Invalid phone number format for '{customer.name}': {customer.phone}. Please use digits only.")
+            if phone.startswith("0"):
+                phone = "234" + phone[1:]
+            if not phone.startswith("234") or len(phone) != 13:
+                _logger.warning("Phone number '%s' for customer '%s' might not be in the expected Opay format (e.g., 234XXXXXXXXXX).", phone, customer.name)
 
         ref_id = ''.join(random.choices(string.ascii_letters + string.digits, k=15))
         biz_payload = {
@@ -344,17 +348,18 @@ class OpayWallet(models.Model):
             "name": customer.name,
             "accountType": "Merchant",
             "sendPassWordFlag": "N",
-            "phone": phone, # Phone number is now mandatory and sanitized
         }
-        # Email is optional, but good to include if available
-        if customer.email:
-            biz_payload["email"] = customer.email
+        
+        # Add phone OR email to the payload if they exist.
+        if phone:
+            biz_payload["phone"] = phone
+        elif email:
+            biz_payload["email"] = email
 
         response_data = self._opay_api_request('generateStaticDepositCode', biz_payload)
         if response_data.get('depositCode'):
             return response_data['depositCode']
         else:
-            # This error would be raised if _analytic_response didn't find 'depositCode'
             raise UserError("Opay API response missing 'depositCode'.")
 
     @api.model
@@ -422,9 +427,9 @@ class ResPartner(models.Model):
 
         # Automatically create wallet if partner is marked as a customer and no wallet exists
         if vals.get("customer_rank", 0) > 0 and not partner.wallet_id:
-            if not partner.phone:
-                # This check ensures we don't proceed without a phone number
-                raise UserError(f"Customer '{partner.name}' must have a valid phone number to create an Opay wallet.")
+            # Check: enforce phone OR email for wallet creation
+            if not partner.phone and not partner.email:
+                raise UserError(f"Customer '{partner.name}' must have a valid phone number or an email address to create an Opay wallet.")
 
             wallet_vals = {
                 'name': partner.name,
