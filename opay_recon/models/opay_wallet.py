@@ -156,7 +156,11 @@ def _verify_rsa_response_sign(resp, opay_public_key):
         return True
     except Exception as e:
         _logger.error("❌ RSA signature verification failed: %s", e)
-        raise UserError(f"Opay API response signature verification failed. Details: {e}")
+        raise UserError(f"Opay API response signature verification failed.\n"
+                        f"Details: {e}\n\n"
+                        f"Please compare the strings below:\n"
+                        f"String to Verify: {string_to_verify}\n"
+                        f"Received Signature: {sign}")
 
 
 def _analytic_response(response_content, merchant_private_key, opay_public_key):
