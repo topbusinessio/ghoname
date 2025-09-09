@@ -25,43 +25,34 @@ def _json_dumps(json_data):
 
 def _import_rsa_key(key_str, key_type="private"):
     """
-    Imports an RSA key from a Base64-encoded string.
-    This method mirrors the official Opay demo's key handling.
-    
-    Args:
-        key_str (str): The Base64 encoded key string (without PEM headers/footers).
-        key_type (str): "public" or "private", for logging.
-    
-    Returns:
-        Crypto.PublicKey.RSA key object.
-    
-    Raises:
-        UserError: If the key is invalid or fails to import.
+    Import RSA key from PEM or Base64 body.
     """
     if not key_str:
         raise UserError(f"Provided RSA {key_type} key is empty or invalid.")
     try:
+        key_str = key_str.strip()
+
+        # If PEM format, import directly
+        if "BEGIN" in key_str:
+            return RSA.import_key(key_str.encode())
+
+        # Else assume Base64 body
         key_bytes = base64.b64decode(key_str)
         return RSA.import_key(key_bytes)
-    except Exception as e:
-        _logger.error("Failed to import Base64-encoded RSA %s key. Details: %s", key_type, e)
-        raise UserError(f"Invalid RSA {key_type} key format. Please provide a Base64-encoded key body.")
 
+    except Exception as e:
+        _logger.error("Failed to import RSA %s key. Details: %s", key_type, e)
+        raise UserError(f"Invalid RSA {key_type} key format. Please provide PEM or Base64 key.")
 
 def _get_rsa_chunk_sizes(rsa_key):
-    """
-    Get max chunk sizes for encryption/decryption based on key size.
-    """
     key_bytes = rsa_key.size_in_bits() // 8
     max_decrypt = key_bytes
     max_encrypt = key_bytes - 11  # PKCS1 v1.5 padding overhead
     return max_encrypt, max_decrypt
 
-
 # --- RSA encryption / decryption ---
 
 def _encrypt_by_public_key(input_str, public_key):
-    """Encrypt content with public key (RSA), auto-detect block size."""
     rsa_key = _import_rsa_key(public_key, key_type="public")
     cipher = PKCS1_v1_5.new(rsa_key)
     max_encrypt, _ = _get_rsa_chunk_sizes(rsa_key)
@@ -76,7 +67,6 @@ def _encrypt_by_public_key(input_str, public_key):
     return base64.b64encode(result_bytes).decode()
 
 def _decrypt_by_private_key(text, private_key):
-    """Decrypt ciphertext with private key (RSA), auto-detect block size."""
     key = _import_rsa_key(private_key, key_type="private")
     cipher = PKCS1_v1_5.new(key)
     try:
@@ -101,7 +91,6 @@ def _decrypt_by_private_key(text, private_key):
 # --- Signing / verification ---
 
 def _generate_sign(data, private_key):
-    """Generates signature for requests (RSA)."""
     if not private_key:
         _logger.error("RSA signing requested but no private key provided.")
         raise UserError("RSA signing requested but no private key provided.")
@@ -114,44 +103,32 @@ def _generate_sign(data, private_key):
 
 def _build_signature_string(response_content):
     """
-    Builds the signature content string for verification.
-    This logic is taken directly from the Opay demo script.
+    Build Opay signature string exactly like the official demo.
     """
     res_data = {
-        'code': response_content.get('code'),
-        'message': response_content.get('message'),
-        'data': response_content.get('data'),
-        'timestamp': response_content.get('timestamp'),
+        "code": response_content.get("code"),
+        "message": response_content.get("message"),
+        "data": response_content.get("data"),
+        "timestamp": response_content.get("timestamp"),
     }
 
-    # The demo code sorts keys alphabetically for the string concatenation.
-    sorted_params = dict(sorted(res_data.items()))
     content = []
-    
-    for key in sorted_params:
-        value = sorted_params[key]
-        if key is None or key == "" or key == "sign" or value is None:
+    for key in sorted(res_data.keys()):
+        value = res_data[key]
+        if not key or value is None or key == "sign":
             continue
         content.append(f"{key}={value}")
-    
     return "&".join(content)
 
 def _verify_rsa_response_sign(resp, opay_public_key):
-    """
-    Verify the RSA signature of the Opay API response using Opay's public key.
-    This version includes debug logs to help diagnose the issue.
-    """
     _logger.info("Starting Opay response signature verification...")
-    _logger.info("Verifying signature using Opay Public Key: %s...", opay_public_key[:30] + '...')
 
     sign = resp.get("sign")
     if not sign:
         _logger.warning("Opay API response missing signature. Skipping verification.")
-        return True # Or raise a different error if sign is mandatory
+        return True
 
-    # Use the new function to build the signature string
     string_to_verify = _build_signature_string(resp)
-    
     _logger.info("Verification details:")
     _logger.info("  - String to verify: '%s'", string_to_verify)
     _logger.info("  - Received Signature: '%s'", sign)
@@ -161,7 +138,7 @@ def _verify_rsa_response_sign(resp, opay_public_key):
         verifier = pkcs1_15.new(opay_key)
         digest = SHA256.new(string_to_verify.encode("utf-8"))
         signature = base64.b64decode(sign)
-        
+
         verifier.verify(digest, signature)
         _logger.info("✅ Opay API response signature verified successfully.")
         return True
@@ -171,39 +148,31 @@ def _verify_rsa_response_sign(resp, opay_public_key):
 
 # --- Response handler ---
 def _analytic_response(response_content, merchant_private_key, opay_public_key):
-    """Analyse Opay response: check code, verify sign, decrypt if needed."""
     code = response_content.get('code')
     if code != '00000':
         error_msg = response_content.get('message', 'Unknown error from Opay.')
         raise UserError(f"Opay API call failed. Code: {code}, Message: {error_msg}")
 
-    # Use the new RSA verification function
     _verify_rsa_response_sign(response_content, opay_public_key)
 
     enc_or_plain = response_content.get('data')
     if enc_or_plain is None:
-        return {} # Handle case where data field is null
+        return {}
 
-    # If already dict/list, assume plaintext JSON and return directly
     if isinstance(enc_or_plain, (dict, list)):
         return enc_or_plain
 
-    # If it's a string, try to decrypt; if that yields JSON, parse it.
     decrypted_text = _decrypt_by_private_key(enc_or_plain, merchant_private_key)
     _logger.info("Decrypted response data: '%s'", decrypted_text)
     try:
-        # Now we parse the JSON and return the dictionary directly.
         return json.loads(decrypted_text)
     except Exception as e:
-        _logger.error("Decrypted data is not a valid JSON. Details: %s", e)
-        # Not a valid JSON, so we return an error.
+        _logger.error("Decrypted data is not valid JSON. Details: %s", e)
         raise UserError("Opay API response data is not a valid JSON string.")
-
 
 # --- Generate Ref ID ---
 def generate_ref_id(length=15):
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
-
 
 # --- Odoo Config ---
 class ResConfigSettings(models.TransientModel):
@@ -241,7 +210,10 @@ class ResConfigSettings(models.TransientModel):
 
         try:
             param_content = _encrypt_by_public_key(_json_dumps(biz_payload), self.opay_public_key)
-            signature = _generate_sign(param_content + timestamp, self.opay_merchant_private_key)
+
+            # ✅ Correct signing: paramContent + timestamp
+            string_to_sign = param_content + timestamp
+            signature = _generate_sign(string_to_sign, self.opay_merchant_private_key)
 
             request_body = {
                 "paramContent": param_content,
@@ -267,7 +239,6 @@ class ResConfigSettings(models.TransientModel):
 
             _logger.info("Raw response from Opay API: %s", json.dumps(response_json, indent=2))
 
-            # Now, _analytic_response will always return a dictionary if successful.
             decrypted_data = _analytic_response(response_json, self.opay_merchant_private_key, self.opay_public_key)
 
             deposit_code = decrypted_data.get("depositCode", "N/A")

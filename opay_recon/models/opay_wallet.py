@@ -50,7 +50,7 @@ def _import_rsa_key(key_str, key_type="public"):
 # --- RSA encryption / decryption ---
 
 def _encrypt_by_public_key(input_str, public_key):
-    """Encrypt content with public key (RSA), auto-detect block size."""
+    """Encrypt content with public key (RSA, auto-detect block size)."""
     key = _import_rsa_key(public_key, key_type="public")
     cipher = PKCS1_v1_5.new(key)
     key_bytes = key.size_in_bytes()
@@ -65,7 +65,7 @@ def _encrypt_by_public_key(input_str, public_key):
     return base64.b64encode(result_bytes).decode()
 
 def _decrypt_by_private_key(text, private_key):
-    """Decrypt ciphertext with private key (RSA), auto-detect block size."""
+    """Decrypt ciphertext with private key (RSA, auto-detect block size)."""
     key = _import_rsa_key(private_key, key_type="private")
     cipher = PKCS1_v1_5.new(key)
     try:
@@ -155,7 +155,9 @@ def _verify_rsa_response_sign(resp, opay_public_key):
         _logger.info("✅ Opay API response signature verified successfully.")
         return True
     except Exception as e:
-        _logger.error("❌ RSA signature verification failed: %s", e)
+        _logger.error(f"❌ RSA signature verification failed: {e}\n"
+                      f"String to Verify: {string_to_verify}\n"
+                      f"Received Signature: {sign}")
         raise UserError(f"Opay API response signature verification failed.\n"
                         f"Details: {e}\n\n"
                         f"Please compare the strings below:\n"
