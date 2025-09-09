@@ -139,10 +139,11 @@ def _build_signature_string(response_content):
 def _verify_rsa_response_sign(resp, opay_public_key):
     """
     Verify the RSA signature of the Opay API response using Opay's public key.
-    This version uses the correct signature string builder from the Opay demo.
+    This version includes debug logs to help diagnose the issue.
     """
     _logger.info("Starting Opay response signature verification...")
-    
+    _logger.info("Verifying signature using Opay Public Key: %s...", opay_public_key[:30] + '...')
+
     sign = resp.get("sign")
     if not sign:
         _logger.warning("Opay API response missing signature. Skipping verification.")
@@ -151,9 +152,9 @@ def _verify_rsa_response_sign(resp, opay_public_key):
     # Use the new function to build the signature string
     string_to_verify = _build_signature_string(resp)
     
-    _logger.debug("Verification details:")
-    _logger.debug("  - String to verify: '%s'", string_to_verify)
-    _logger.debug("  - Received Signature: '%s'", sign)
+    _logger.info("Verification details:")
+    _logger.info("  - String to verify: '%s'", string_to_verify)
+    _logger.info("  - Received Signature: '%s'", sign)
 
     try:
         opay_key = _import_rsa_key(opay_public_key, key_type="public")
@@ -189,11 +190,14 @@ def _analytic_response(response_content, merchant_private_key, opay_public_key):
 
     # If it's a string, try to decrypt; if that yields JSON, parse it.
     decrypted_text = _decrypt_by_private_key(enc_or_plain, merchant_private_key)
+    _logger.info("Decrypted response data: '%s'", decrypted_text)
     try:
+        # Now we parse the JSON and return the dictionary directly.
         return json.loads(decrypted_text)
-    except Exception:
-        # Not JSON – return raw decrypted text as a string
-        return {"raw": decrypted_text}
+    except Exception as e:
+        _logger.error("Decrypted data is not a valid JSON. Details: %s", e)
+        # Not a valid JSON, so we return an error.
+        raise UserError("Opay API response data is not a valid JSON string.")
 
 
 # --- Generate Ref ID ---
@@ -253,14 +257,20 @@ class ResConfigSettings(models.TransientModel):
 
             api_url = "https://payapi.opayweb.com/api/v2/third/depositcode/generateStaticDepositCode"
 
+            _logger.info("Attempting Opay API call to %s", api_url)
+            _logger.info("Request Headers: %s", json.dumps(headers, indent=2))
+            _logger.info("Request Body: %s", json.dumps(request_body, indent=2))
+            
             response = requests.post(api_url, json=request_body, headers=headers, timeout=15)
             response.raise_for_status()
             response_json = response.json()
 
-            decrypted_data = _analytic_response(response_json, self.opay_merchant_private_key, self.opay_public_key)
-            decrypted_json = json.loads(decrypted_data.get("raw", "{}"))
+            _logger.info("Raw response from Opay API: %s", json.dumps(response_json, indent=2))
 
-            deposit_code = decrypted_json.get("depositCode", "N/A")
+            # Now, _analytic_response will always return a dictionary if successful.
+            decrypted_data = _analytic_response(response_json, self.opay_merchant_private_key, self.opay_public_key)
+
+            deposit_code = decrypted_data.get("depositCode", "N/A")
             _logger.info("✅ Opay validated. Deposit code: %s", deposit_code)
 
             return {

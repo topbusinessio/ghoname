@@ -128,9 +128,10 @@ def _build_signature_string(response_content):
 def _verify_rsa_response_sign(resp, opay_public_key):
     """
     Verify the RSA signature of the Opay API response.
-    This version uses the correct signature string builder from the Opay demo.
+    This version includes debug logs to help diagnose the issue.
     """
     _logger.info("Starting Opay response signature verification...")
+    _logger.info("Verifying signature using Opay Public Key: %s...", opay_public_key[:30] + '...')
     
     sign = resp.get("sign")
     if not sign:
@@ -140,9 +141,9 @@ def _verify_rsa_response_sign(resp, opay_public_key):
     # Use the new function to build the signature string
     string_to_verify = _build_signature_string(resp)
     
-    _logger.debug("Verification details:")
-    _logger.debug("  - String to verify: '%s'", string_to_verify)
-    _logger.debug("  - Received Signature: '%s'", sign)
+    _logger.info("Verification details:")
+    _logger.info("  - String to verify: '%s'", string_to_verify)
+    _logger.info("  - Received Signature: '%s'", sign)
 
     try:
         opay_key = _import_rsa_key(opay_public_key, key_type="public")
@@ -178,6 +179,7 @@ def _analytic_response(response_content, merchant_private_key, opay_public_key):
 
     # If it's a string, try to decrypt; if that yields JSON, parse it.
     decrypted_text = _decrypt_by_private_key(enc_or_plain, merchant_private_key)
+    _logger.info("Decrypted response data: '%s'", decrypted_text)
     try:
         return json.loads(decrypted_text)
     except Exception:
@@ -193,7 +195,7 @@ class OpayConfig(models.Model):
 
     client_auth_key = fields.Char(string='Client Auth Key', required=True)
     merchant_private_key = fields.Text(string='Merchant Private Key', required=True,
-                                        help="Paste your Base64 encoded RSA Merchant Private Key here.")
+                                       help="Paste your Base64 encoded RSA Merchant Private Key here.")
     opay_public_key = fields.Text(string='Opay Public Key', required=True,
                                   help="Paste Opay’s Base64 encoded RSA Public Key here.")
     opay_merchant_id = fields.Char(string='Opay Merchant ID', required=True)
@@ -267,11 +269,15 @@ class OpayWallet(models.Model):
 
         try:
             _logger.info("🔹 Opay Request URL: %s", api_url)
-            _logger.debug("🔹 Opay Request Body (first 500 chars): %s", json.dumps(request_body)[:500])
+            _logger.info("🔹 Opay Request Headers: %s", json.dumps(headers, indent=2))
+            _logger.info("🔹 Opay Request Body (paramContent): %s", request_body.get('paramContent'))
+            _logger.info("🔹 Opay Request Body (sign): %s", request_body.get('sign'))
+            
             response = requests.post(api_url, json=request_body, headers=headers, timeout=15)
             response.raise_for_status() # Raise an exception for bad status codes
             response_json = response.json()
-            _logger.info("✅ Opay API Response (raw, first 2000 chars): %s", json.dumps(response_json, indent=2)[:2000])
+            
+            _logger.info("✅ Opay API Response (raw): %s", json.dumps(response_json, indent=2))
 
             # Analyze response: verify signature and decrypt data
             decrypted_data = _analytic_response(response_json, merchant_private_key, opay_public_key)
