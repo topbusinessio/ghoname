@@ -101,49 +101,42 @@ def _generate_sign(data, private_key):
     signature = signer.sign(digest)
     return base64.b64encode(signature).decode("utf-8")
 
-def _build_signature_string(response_content):
-    """
-    Build Opay signature string exactly like the official demo.
-    """
-    res_data = {
-        "code": response_content.get("code"),
-        "message": response_content.get("message"),
-        "data": response_content.get("data"),
-        "timestamp": response_content.get("timestamp"),
-    }
-
-    content = []
-    for key in sorted(res_data.keys()):
-        value = res_data[key]
-        if not key or value is None or key == "sign":
-            continue
-        content.append(f"{key}={value}")
-    return "&".join(content)
-
 def _verify_rsa_response_sign(resp, opay_public_key):
-    _logger.info("Starting Opay response signature verification...")
-
+    """
+    Verify Opay API response signature.
+    Tries both signing rules:
+      1. code + message + timestamp
+      2. code + message + data + timestamp
+    """
     sign = resp.get("sign")
     if not sign:
         _logger.warning("Opay API response missing signature. Skipping verification.")
         return True
 
-    string_to_verify = _build_signature_string(resp)
-    _logger.info("Verification details:")
-    _logger.info("  - String to verify: '%s'", string_to_verify)
-    _logger.info("  - Received Signature: '%s'", sign)
-
     try:
         opay_key = _import_rsa_key(opay_public_key, key_type="public")
         verifier = pkcs1_15.new(opay_key)
-        digest = SHA256.new(string_to_verify.encode("utf-8"))
         signature = base64.b64decode(sign)
 
-        verifier.verify(digest, signature)
-        _logger.info("✅ Opay API response signature verified successfully.")
+        # --- Rule 1 ---
+        string1 = f"code={resp.get('code')}&message={resp.get('message')}&timestamp={resp.get('timestamp')}"
+        digest1 = SHA256.new(string1.encode("utf-8"))
+        try:
+            verifier.verify(digest1, signature)
+            _logger.info("✅ Verified Opay response signature using rule 1 (no data). String: %s", string1)
+            return True
+        except Exception:
+            _logger.info("❌ Rule 1 verification failed. Tried string: %s", string1)
+
+        # --- Rule 2 ---
+        string2 = f"code={resp.get('code')}&message={resp.get('message')}&data={resp.get('data')}&timestamp={resp.get('timestamp')}"
+        digest2 = SHA256.new(string2.encode("utf-8"))
+        verifier.verify(digest2, signature)
+        _logger.info("✅ Verified Opay response signature using rule 2 (with data). String: %s", string2)
         return True
+
     except Exception as e:
-        _logger.error("❌ RSA signature verification failed: %s", e)
+        _logger.error("❌ RSA signature verification failed after both rules. Details: %s", e)
         raise UserError(f"Opay API response signature verification failed. Details: {e}")
 
 # --- Response handler ---
