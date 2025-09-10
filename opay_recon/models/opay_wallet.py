@@ -126,23 +126,18 @@ def _build_signature_string(response_content):
     return "&".join(content)
 
 def _verify_rsa_response_sign(resp, opay_public_key):
-    """
-    Verify the RSA signature of the Opay API response.
-    Official: build string with code, message, data, timestamp (skip None).
-    """
     sign = resp.get("sign")
     if not sign:
         _logger.warning("Opay API response missing signature. Skipping verification.")
         return True
 
-    # Build official string
     candidate = _build_signature_string(resp)
-    _logger.info("🔎 Signature string: %s", candidate)
+    _logger.info("🔎 Signature string (to verify): %s", candidate)
 
-    # Verify signature
     opay_key = _import_rsa_key(opay_public_key, key_type="public")
     verifier = pkcs1_15.new(opay_key)
     signature = base64.b64decode(sign)
+    _logger.info("🔎 Signature (decoded hex): %s", signature.hex())
 
     try:
         digest = SHA256.new(candidate.encode("utf-8"))
@@ -171,7 +166,45 @@ def _analytic_response(response_content, merchant_private_key, opay_public_key):
     # If already dict/list, assume plaintext JSON
     if isinstance(data, (dict, list)):
         return data
-self.client_auth_key or '')
+
+    # If it's a string, try decryption
+    try:
+        decrypted_text = _decrypt_by_private_key(data, merchant_private_key)
+        _logger.info("Decrypted response data: '%s'", decrypted_text)
+        try:
+            return json.loads(decrypted_text)
+        except Exception:
+            return {"raw": decrypted_text}
+    except Exception:
+        # Not decryptable, return raw string
+        _logger.warning("Data not decryptable, returning as-is.")
+        return data
+
+
+# --- Opay Configuration ---
+class OpayConfig(models.Model):
+    _name = 'opay.config'
+    _description = 'Opay Configuration'
+    _inherit = 'res.config.settings'
+
+    client_auth_key = fields.Char(string='Client Auth Key', required=True)
+    merchant_private_key = fields.Text(string='Merchant Private Key', required=True,
+                                       help="Paste your Base64 encoded RSA Merchant Private Key here.")
+    opay_public_key = fields.Text(string='Opay Public Key', required=True,
+                                  help="Paste Opay’s Base64 encoded RSA Public Key here.")
+    opay_merchant_id = fields.Char(string='Opay Merchant ID', required=True)
+    account_prefix = fields.Char(string='Account Prefix', default='OPAY')
+    is_test_mode = fields.Boolean(string='Test Mode', default=False)
+    use_rsa_signing = fields.Boolean(
+        string="Use RSA Signing",
+        default=True,
+        help="Enable for RSA signatures with private key. Disable for SHA256 hash signing."
+    )
+
+    def set_values(self):
+        super(OpayConfig, self).set_values()
+        params = self.env['ir.config_parameter'].sudo()
+        params.set_param('opay.client_auth_key', self.client_auth_key or '')
         params.set_param('opay.merchant_private_key', self.merchant_private_key or '')
         params.set_param('opay.opay_public_key', self.opay_public_key or '')
         params.set_param('opay.opay_merchant_id', self.opay_merchant_id or '')
@@ -233,130 +266,4 @@ class OpayWallet(models.Model):
             _logger.info("🔹 Opay Request Headers: %s", json.dumps(headers, indent=2))
             _logger.info("🔹 Opay Request Body (paramContent): %s", request_body.get('paramContent'))
             _logger.info("🔹 Opay Request Body (sign): %s", request_body.get('sign'))
-            
-            response = requests.post(api_url, json=request_body, headers=headers, timeout=15)
-            response.raise_for_status() # Raise an exception for bad status codes
-            response_json = response.json()
-            
-            _logger.info("✅ Opay API Response (raw): %s", json.dumps(response_json, indent=2))
 
-            # Analyze response: verify signature and decrypt data
-            decrypted_data = _analytic_response(response_json, merchant_private_key, opay_public_key)
-            _logger.info("✅ Opay API Response (parsed): %s", decrypted_data)
-            return decrypted_data
-        except requests.exceptions.RequestException as e:
-            _logger.error("❌ Connection error to Opay: %s", str(e))
-            raise UserError(f"Connection to Opay API failed: {str(e)}")
-        except Exception as e:
-            _logger.error("❌ Unexpected error during API call: %s", str(e))
-            # This catches errors from _analytic_response and other unexpected issues
-            raise UserError(f"Unexpected error occurred with Opay API: {str(e)}")
-
-    @api.model
-    def _create_virtual_account(self, customer):
-        """Generates a virtual account number for the customer using Opay API."""
-        params = self.env['ir.config_parameter'].sudo()
-        merchant_id = params.get_param('opay.opay_merchant_id', '')
-        is_test_mode = params.get_param('opay.is_test_mode') == 'True'
-
-        if is_test_mode:
-            account_prefix = params.get_param('opay.account_prefix', 'OPAY')
-            random_number = str(random.randint(1000000000, 9999999999))
-            return f"{account_prefix}-{random_number}"
-
-        if not merchant_id:
-            raise UserError("Missing Opay Merchant ID. Please configure it in Opay Settings.")
-
-        # --- Enforce a phone number OR email address ---
-        phone = customer.phone.replace(" ", "").replace("+", "") if customer.phone else ""
-        email = customer.email.strip() if customer.email else ""
-        
-        # Opay API requires at least one of these.
-        if not phone and not email:
-            raise UserError(f"Customer '{customer.name}' must have a valid phone number or an email address to create an Opay wallet.")
-
-        # If a phone number exists, ensure it's in the correct format.
-        if phone:
-            if not phone.isdigit():
-                raise UserError(f"Invalid phone number format for '{customer.name}': {customer.phone}. Please use digits only.")
-            if phone.startswith("0"):
-                phone = "234" + phone[1:]
-            if not phone.startswith("234") or len(phone) != 13:
-                _logger.warning("Phone number '%s' for customer '%s' might not be in the expected Opay format (e.g., 234XXXXXXXXXX).", phone, customer.name)
-
-        ref_id = ''.join(random.choices(string.ascii_letters + string.digits, k=15))
-        biz_payload = {
-            "opayMerchantId": merchant_id,
-            "refId": ref_id,
-            "name": customer.name,
-            "accountType": "Merchant",
-            "sendPassWordFlag": "N",
-        }
-        
-        # Add phone OR email to the payload if they exist.
-        if phone:
-            biz_payload["phone"] = phone
-        elif email:
-            biz_payload["email"] = email
-
-        response_data = self._opay_api_request('generateStaticDepositCode', biz_payload)
-        if response_data.get('depositCode'):
-            return response_data['depositCode']
-        else:
-            raise UserError("Opay API response missing 'depositCode'.")
-
-    @api.model
-    def create(self, vals):
-        """Creates an Opay wallet for the partner and triggers API call."""
-        wallet = super(OpayWallet, self).create(vals)
-        if wallet.partner_id:
-            try:
-                account_number = wallet._create_virtual_account(wallet.partner_id)
-                wallet.write({'account_number': account_number, 'state': 'active'})
-            except UserError as e:
-                wallet.write({'state': 'draft'}) # Reset state if creation fails
-                raise UserError(f"Wallet creation failed for {wallet.partner_id.name}.\n{str(e)}")
-        return wallet
-
-
-# --- Opay Payment ---
-class OpayPayment(models.Model):
-    _name = 'opay.payment'
-    _description = 'Opay Payment'
-
-    name = fields.Char(string='Payment Reference', required=True)
-    transaction_id = fields.Char(string='Transaction ID', readonly=True)
-    amount = fields.Float(string='Amount', readonly=True)
-    status = fields.Char(string='Status', readonly=True)
-    sale_order_id = fields.Many2one('sale.order', string='Sale Order', readonly=True)
-    payment_date = fields.Datetime(string='Payment Date', readonly=True, default=fields.Datetime.now)
-
-    @api.model
-    def create(self, vals):
-        """Handles payment creation, updating sale order state if successful."""
-        payment = super(OpayPayment, self).create(vals)
-        if payment.sale_order_id and payment.status == 'SUCCESS':
-            # Assuming 'SUCCESS' is the status for a successful payment
-            payment.sale_order_id.write({'state': 'paid'})
-        return payment
-
-
-# --- Extend res.partner ---
-class ResPartner(models.Model):
-    _inherit = 'res.partner'
-
-    wallet_id = fields.Many2one('opay.wallet', string="Opay Wallet", ondelete="restrict")
-    wallet_account_number = fields.Char(related='wallet_id.account_number', string="Wallet Deposit Code", readonly=True)
-    wallet_balance = fields.Float(related='wallet_id.balance', string="Wallet Balance", readonly=True)
-
-    def _sanitize_phone_for_opay(self, phone):
-        """Sanitizes phone number for Opay, ensuring Nigerian format."""
-        if not phone:
-            return ""
-        phone = phone.replace(" ", "").replace("+", "")
-        # Ensure it starts with '234' for Nigerian numbers
-        if phone.startswith("0"):
-            phone = "234" + phone[1:]
-        # Remove any non-digit characters
-        phone = ''.join(filter(str.isdigit, phone))
-        return phone
