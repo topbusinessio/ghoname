@@ -128,42 +128,46 @@ def _build_signature_string(response_content):
 def _verify_rsa_response_sign(resp, opay_public_key):
     """
     Verify the RSA signature of the Opay API response.
-    This version includes debug logs to help diagnose the issue.
+    Tries both signing rules automatically:
+      1. code, message, timestamp
+      2. code, message, data, timestamp
     """
-    _logger.info("Starting Opay response signature verification...")
-    _logger.info("Verifying signature using Opay Public Key: %s...", opay_public_key[:30] + '...')
-    
     sign = resp.get("sign")
     if not sign:
         _logger.warning("Opay API response missing signature. Skipping verification.")
-        return True # Or raise a different error if sign is mandatory
-
-    # Use the new function to build the signature string
-    string_to_verify = _build_signature_string(resp)
-    
-    _logger.info("Verification details:")
-    _logger.info("  - String to verify: '%s'", string_to_verify)
-    _logger.info("  - Received Signature: '%s'", sign)
-
-    try:
-        opay_key = _import_rsa_key(opay_public_key, key_type="public")
-        verifier = pkcs1_15.new(opay_key)
-        digest = SHA256.new(string_to_verify.encode("utf-8"))
-        signature = base64.b64decode(sign)
-        
-        verifier.verify(digest, signature)
-        _logger.info("✅ Opay API response signature verified successfully.")
         return True
-    except Exception as e:
-        _logger.error(f"❌ RSA signature verification failed: {e}\n"
-                      f"String to Verify: {string_to_verify}\n"
-                      f"Received Signature: {sign}")
-        raise UserError(f"Opay API response signature verification failed.\n"
-                        f"Details: {e}\n\n"
-                        f"Please compare the strings below:\n"
-                        f"String to Verify: {string_to_verify}\n"
-                        f"Received Signature: {sign}")
 
+    # Candidate strings
+    base_fields = {
+        "code": resp.get("code"),
+        "message": resp.get("message"),
+        "timestamp": resp.get("timestamp"),
+    }
+    str1 = "&".join(f"{k}={v}" for k, v in sorted(base_fields.items()) if v is not None)
+
+    candidates = [("base_fields", str1)]
+
+    if resp.get("data") is not None:
+        extended_fields = dict(base_fields)
+        extended_fields["data"] = resp.get("data")
+        str2 = "&".join(f"{k}={v}" for k, v in sorted(extended_fields.items()) if v is not None)
+        candidates.append(("extended_fields", str2))
+
+    # Verify signature
+    opay_key = _import_rsa_key(opay_public_key, key_type="public")
+    verifier = pkcs1_15.new(opay_key)
+    signature = base64.b64decode(sign)
+
+    for label, candidate in candidates:
+        try:
+            digest = SHA256.new(candidate.encode("utf-8"))
+            verifier.verify(digest, signature)
+            _logger.info("✅ Signature verified successfully using: %s", label)
+            return True
+        except Exception:
+            _logger.warning("❌ Verification failed with rule: %s (string=%s)", label, candidate)
+
+    raise UserError("Opay API response signature verification failed. Tried both rules.")
 
 def _analytic_response(response_content, merchant_private_key, opay_public_key):
     """Analyse Opay response: check code, verify sign, decrypt if needed."""
