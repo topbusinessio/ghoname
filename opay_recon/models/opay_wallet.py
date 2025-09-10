@@ -128,46 +128,31 @@ def _build_signature_string(response_content):
 def _verify_rsa_response_sign(resp, opay_public_key):
     """
     Verify the RSA signature of the Opay API response.
-    Tries both signing rules automatically:
-      1. code, message, timestamp
-      2. code, message, data, timestamp
+    Official: build string with code, message, data, timestamp (skip None).
     """
     sign = resp.get("sign")
     if not sign:
         _logger.warning("Opay API response missing signature. Skipping verification.")
         return True
 
-    # Candidate strings
-    base_fields = {
-        "code": resp.get("code"),
-        "message": resp.get("message"),
-        "timestamp": resp.get("timestamp"),
-    }
-    str1 = "&".join(f"{k}={v}" for k, v in sorted(base_fields.items()) if v is not None)
-
-    candidates = [("base_fields", str1)]
-
-    if resp.get("data") is not None:
-        extended_fields = dict(base_fields)
-        extended_fields["data"] = resp.get("data")
-        str2 = "&".join(f"{k}={v}" for k, v in sorted(extended_fields.items()) if v is not None)
-        candidates.append(("extended_fields", str2))
+    # Build official string
+    candidate = _build_signature_string(resp)
+    _logger.info("🔎 Signature string: %s", candidate)
 
     # Verify signature
     opay_key = _import_rsa_key(opay_public_key, key_type="public")
     verifier = pkcs1_15.new(opay_key)
     signature = base64.b64decode(sign)
 
-    for label, candidate in candidates:
-        try:
-            digest = SHA256.new(candidate.encode("utf-8"))
-            verifier.verify(digest, signature)
-            _logger.info("✅ Signature verified successfully using: %s", label)
-            return True
-        except Exception:
-            _logger.warning("❌ Verification failed with rule: %s (string=%s)", label, candidate)
+    try:
+        digest = SHA256.new(candidate.encode("utf-8"))
+        verifier.verify(digest, signature)
+        _logger.info("✅ Signature verified successfully.")
+        return True
+    except Exception as e:
+        _logger.error("❌ Signature verification failed. String=%s, Error=%s", candidate, e)
+        raise UserError("Opay API response signature verification failed.")
 
-    raise UserError("Opay API response signature verification failed. Tried both rules.")
 
 def _analytic_response(response_content, merchant_private_key, opay_public_key):
     """Analyse Opay response: check code, verify sign, decrypt if needed."""
@@ -176,51 +161,17 @@ def _analytic_response(response_content, merchant_private_key, opay_public_key):
         error_msg = response_content.get('message', 'Unknown error from Opay.')
         raise UserError(f"Opay API call failed. Code: {code}, Message: {error_msg}")
 
-    # Use the new RSA verification function
+    # Verify Opay signature
     _verify_rsa_response_sign(response_content, opay_public_key)
 
-    enc_or_plain = response_content.get('data')
-    if enc_or_plain is None:
-        return {} # Handle case where data field is null
+    data = response_content.get('data')
+    if data is None:
+        return {}
 
-    # If already dict/list, assume plaintext JSON and return directly
-    if isinstance(enc_or_plain, (dict, list)):
-        return enc_or_plain
-
-    # If it's a string, try to decrypt; if that yields JSON, parse it.
-    decrypted_text = _decrypt_by_private_key(enc_or_plain, merchant_private_key)
-    _logger.info("Decrypted response data: '%s'", decrypted_text)
-    try:
-        return json.loads(decrypted_text)
-    except Exception:
-        # Not JSON – return raw decrypted text as a string
-        return {"raw": decrypted_text}
-
-
-# --- Opay Configuration ---
-class OpayConfig(models.Model):
-    _name = 'opay.config'
-    _description = 'Opay Configuration'
-    _inherit = 'res.config.settings'
-
-    client_auth_key = fields.Char(string='Client Auth Key', required=True)
-    merchant_private_key = fields.Text(string='Merchant Private Key', required=True,
-                                       help="Paste your Base64 encoded RSA Merchant Private Key here.")
-    opay_public_key = fields.Text(string='Opay Public Key', required=True,
-                                  help="Paste Opay’s Base64 encoded RSA Public Key here.")
-    opay_merchant_id = fields.Char(string='Opay Merchant ID', required=True)
-    account_prefix = fields.Char(string='Account Prefix', default='OPAY')
-    is_test_mode = fields.Boolean(string='Test Mode', default=False)
-    use_rsa_signing = fields.Boolean(
-        string="Use RSA Signing",
-        default=True,
-        help="Enable for RSA signatures with private key. Disable for SHA256 hash signing."
-    )
-
-    def set_values(self):
-        super(OpayConfig, self).set_values()
-        params = self.env['ir.config_parameter'].sudo()
-        params.set_param('opay.client_auth_key', self.client_auth_key or '')
+    # If already dict/list, assume plaintext JSON
+    if isinstance(data, (dict, list)):
+        return data
+self.client_auth_key or '')
         params.set_param('opay.merchant_private_key', self.merchant_private_key or '')
         params.set_param('opay.opay_public_key', self.opay_public_key or '')
         params.set_param('opay.opay_merchant_id', self.opay_merchant_id or '')
@@ -409,35 +360,3 @@ class ResPartner(models.Model):
         # Remove any non-digit characters
         phone = ''.join(filter(str.isdigit, phone))
         return phone
-
-    @api.model
-    def create(self, vals):
-        """Sanitizes phone number and handles wallet creation upon partner creation."""
-        if vals.get("phone"):
-            vals["phone"] = self._sanitize_phone_for_opay(vals["phone"])
-        partner = super(ResPartner, self).create(vals)
-
-        # Automatically create wallet if partner is marked as a customer and no wallet exists
-        if vals.get("customer_rank", 0) > 0 and not partner.wallet_id:
-            # Check: enforce phone OR email for wallet creation
-            if not partner.phone and not partner.email:
-                raise UserError(f"Customer '{partner.name}' must have a valid phone number or an email address to create an Opay wallet.")
-
-            wallet_vals = {
-                'name': partner.name,
-                'partner_id': partner.id,
-                'currency_id': self.env.company.currency_id.id
-            }
-            try:
-                wallet = self.env['opay.wallet'].create(wallet_vals)
-                partner.write({'wallet_id': wallet.id}) # Link wallet to partner
-            except UserError as e:
-                # If wallet creation fails, propagate the error and ensure partner state is clean
-                raise UserError(f"Failed to create Opay wallet for '{partner.name}'.\n{str(e)}")
-        return partner
-
-    def write(self, vals):
-        """Sanitizes phone number on update."""
-        if vals.get("phone"):
-            vals["phone"] = self._sanitize_phone_for_opay(vals["phone"])
-        return super(ResPartner, self).write(vals)
