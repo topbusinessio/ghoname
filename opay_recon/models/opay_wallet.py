@@ -266,4 +266,6 @@ class OpayWallet(models.Model):
             _logger.info("🔹 Opay Request Headers: %s", json.dumps(headers, indent=2))
             _logger.info("🔹 Opay Request Body (paramContent): %s", request_body.get('paramContent'))
             _logger.info("🔹 Opay Request Body (sign): %s", request_body.get('sign'))
+        except Exception as e:
+            raise UserError(f"An error: {str(e)}")
 
