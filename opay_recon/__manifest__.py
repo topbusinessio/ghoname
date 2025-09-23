@@ -10,7 +10,7 @@ Opay Wallet System:
 - Supports payments and reconciliation
 - Dynamic configuration management (test/live)
     """,
-    'author': 'Your Name',
+    'author': 'Ghoname',
     'depends': ['base', 'sale', 'web'],
     'data': [
         'data/opay_wallet_data.xml',
@@ -24,4 +24,7 @@ Opay Wallet System:
     'qweb': [],
     'installable': True,
     'application': True,
+    'external_dependencies': {
+        'python': ['pycryptodome'],
+    },
 }
