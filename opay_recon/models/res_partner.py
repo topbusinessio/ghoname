@@ -1,5 +1,5 @@
-from odoo import models, fields, api
-from odoo.exceptions import UserError
+from odoo import _, api, fields, models
+from odoo.exceptions import UserError, ValidationError
 import time
 import requests
 from . import opay_wallet
@@ -13,9 +13,17 @@ class Partner(models.Model):
     wallet_account_number = fields.Char("Opay Wallet Number", related="wallet_id.account_number", readonly=True)
     wallet_balance = fields.Float("Opay Wallet Balance", related="wallet_id.balance", readonly=True)
 
+    @api.constrains('email')
+    def _check_email_required(self):
+        for partner in self:
+            if not partner.email:
+                raise ValidationError(_('Email address is required for partners.'))
+
     @api.model
     def create(self, vals):
         # Create the partner record first
+        if not vals.get('email'):
+            raise ValidationError(_('Email address is required for creating a partner.'))
         partner = super(Partner, self).create(vals)
         # Then create the Opay wallet for the partner
         partner._create_opay_wallet()
