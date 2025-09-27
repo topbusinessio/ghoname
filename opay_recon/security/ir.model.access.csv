@@ -1,7 +1,5 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_opay_wallet,access_opay_wallet,model_opay_wallet,base.group_user,1,1,1,1
-access_opay_payment,access_opay_payment,model_opay_payment,base.group_user,1,1,1,1
 access_opay_config,access_opay_config,model_opay_config,base.group_user,1,1,1,1
 access_opay_wallet_admin,access_opay_wallet_admin,model_opay_wallet,base.group_system,1,1,1,1
-access_opay_payment_admin,access_opay_payment_admin,model_opay_payment,base.group_system,1,1,1,1
 access_opay_config_admin,access_opay_config_admin,model_opay_config,base.group_system,1,1,1,1
