@@ -5,101 +5,29 @@
         <field name="model">res.config.settings</field>
         <field name="inherit_id" ref="base.res_config_settings_view_form"/>
         <field name="arch" type="xml">
-            <xpath expr="//form" position="inside">
-                <div class="app_settings_block"
-                     data-string="Opay Wallet"
-                     string="Opay Wallet"
-                     data-key="opay_wallet">
-                    <h2>Opay Wallet Configuration</h2>
-                    <div class="row mt16 o_settings_container">
-                        <div class="col-12 col-lg-6 o_setting_box">
-                            <div class="o_setting_right_pane">
-                                <span class="o_form_label">API &amp; Security Settings</span>
-                                <div class="text-muted">
-                                    Configure your Opay API credentials and RSA keys below.
-                                </div>
-                                <div class="content-group">
-
-                                    <!-- Client Auth Key -->
-                                    <div class="mt16">
-                                        <label for="opay_client_auth_key" class="o_form_label"/>
-                                        <field name="opay_client_auth_key"
-                                               placeholder="Enter Opay Client Auth Key"/>
-                                        <div class="o_form_help">
-                                            The Client Auth Key provided by Opay for API authentication.
-                                        </div>
-                                    </div>
-
-                                    <!-- Merchant Private Key -->
-                                    <div class="mt16">
-                                        <label for="opay_merchant_private_key" class="o_form_label"/>
-                                        <field name="opay_merchant_private_key"
-                                               widget="text"
-                                               placeholder="Paste Opay Merchant Private Key"/>
-                                        <div class="o_form_help">
-                                            Paste your full RSA Merchant Private Key here, including
-                                            <code>-----BEGIN RSA PRIVATE KEY-----</code> and
-                                            <code>-----END RSA PRIVATE KEY-----</code>.
-                                        </div>
-                                    </div>
-
-                                    <!-- Opay Public Key -->
-                                    <div class="mt16">
-                                        <label for="opay_public_key" class="o_form_label"/>
-                                        <field name="opay_public_key"
-                                               widget="text"
-                                               placeholder="Paste Opay Public Key"/>
-                                        <div class="o_form_help">
-                                            Paste Opay&#39;s RSA Public Key (used for encrypting requests).
-                                        </div>
-                                    </div>
-
-                                    <!-- Merchant ID -->
-                                    <div class="mt16">
-                                        <label for="opay_merchant_id" class="o_form_label"/>
-                                        <field name="opay_merchant_id"
-                                               placeholder="Enter Opay Merchant ID"/>
-                                        <div class="o_form_help">
-                                            Merchant ID assigned by Opay. Required for live transactions.
-                                        </div>
-                                    </div>
-
-                                    <!-- Account Prefix -->
-                                    <div class="mt16">
-                                        <label for="opay_account_prefix" class="o_form_label"/>
-                                        <field name="opay_account_prefix"
-                                               placeholder="Account prefix (e.g., OPAY)"/>
-                                        <div class="o_form_help">
-                                            The prefix for generated wallet account numbers.
-                                        </div>
-                                    </div>
-
-                                    <!-- Test Mode -->
-                                    <div class="mt16">
-                                        <label for="opay_test_mode" class="o_form_label"/>
-                                        <field name="opay_test_mode"/>
-                                        <div class="o_form_help">
-                                            Enable Test Mode to use sandbox credentials instead of live ones.
-                                        </div>
-                                    </div>
-
-                                    <!-- Test Credentials Button -->
-                                    <div class="mt16">
-                                        <button name="test_opay_connection"
-                                                type="object"
-                                                string="Test Live Credentials"
-                                                class="btn-primary"/>
-                                        <div class="o_form_help">
-                                            Validate your credentials against Opay&#39;s API.
-                                            Errors will be shown if any field is misconfigured.
-                                        </div>
-                                    </div>
-
-                                </div>
-                            </div>
-                        </div>
+            <xpath expr="//block[@name='integration']" position="inside">
+                <setting string="Opay Configurations" help="Set Opay parameter for wallet generation" id="opay_wallet">
+                    <div class="content-group mt16">
+                        <label for="opay_public_key" class="o_light_label mr8"/>
+                        <field name="opay_public_key"/>
                     </div>
-                </div>
+                    <div class="content-group mt16">
+                        <label for="opay_client_auth_key" class="o_light_label mr8"/>
+                        <field name="opay_client_auth_key"/>
+                    </div>
+                    <div class="content-group mt16">
+                        <label for="opay_merchant_id" class="o_light_label mr8"/>
+                        <field name="opay_merchant_id"/>
+                    </div>
+                    <div class="content-group mt16">
+                        <label for="opay_merchant_private_key" class="o_light_label mr8"/>
+                        <field name="opay_merchant_private_key"/>
+                    </div>
+                    <div class="content-group mt16">
+                        <label for="opay_account_prefix" class="o_light_label mr8"/>
+                        <field name="opay_account_prefix"/>
+                    </div>
+                </setting>
             </xpath>
         </field>
     </record>

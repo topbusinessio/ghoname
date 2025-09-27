@@ -149,7 +149,7 @@ def _verify_rsa_response_sign(resp, opay_public_key):
         raise UserError("Opay API response signature verification failed.")
 
 
-def _analytic_response(response_content, merchant_private_key, opay_public_key):
+def _analytic_response(response_content, opay_public_key, merchant_private_key):
     """Analyse Opay response: check code, verify sign, decrypt if needed."""
     code = response_content.get('code')
     if code != '00000':
@@ -180,6 +180,20 @@ def _analytic_response(response_content, merchant_private_key, opay_public_key):
         _logger.warning("Data not decryptable, returning as-is.")
         return data
 
+def build_request_body(request_content, opay_public_key, merchant_private_key, timestamp):
+    """
+    Build request body
+    :param request_content: request content
+    :return: request ciphertext
+    """
+    # encrypt
+    enc_data = _encrypt_by_public_key(_json_dumps(request_content), opay_public_key)
+
+    # generate sign
+    sign = _generate_sign(enc_data + timestamp, merchant_private_key)
+
+    return {"paramContent": enc_data, "sign": sign}
+
 
 # --- Opay Configuration ---
 class OpayConfig(models.Model):
@@ -187,12 +201,12 @@ class OpayConfig(models.Model):
     _description = 'Opay Configuration'
     _inherit = 'res.config.settings'
 
-    client_auth_key = fields.Char(string='Client Auth Key', required=True)
-    merchant_private_key = fields.Text(string='Merchant Private Key', required=True,
+    client_auth_key = fields.Char(string='Auth Key', required=True)
+    merchant_private_key = fields.Char(string='Merchant Private Key', required=True,
                                        help="Paste your Base64 encoded RSA Merchant Private Key here.")
-    opay_public_key = fields.Text(string='Opay Public Key', required=True,
+    opay_public_key = fields.Char(string='Public Key', required=True,
                                   help="Paste Opay’s Base64 encoded RSA Public Key here.")
-    opay_merchant_id = fields.Char(string='Opay Merchant ID', required=True)
+    opay_merchant_id = fields.Char(string='Merchant ID', required=True)
     account_prefix = fields.Char(string='Account Prefix', default='OPAY')
     is_test_mode = fields.Boolean(string='Test Mode', default=False)
     use_rsa_signing = fields.Boolean(
@@ -219,6 +233,7 @@ class OpayWallet(models.Model):
     _description = 'Opay Wallet'
 
     name = fields.Char(string='Account Name', required=True)
+    reference = fields.Char(string='Reference', readonly=True, copy=False)
     partner_id = fields.Many2one('res.partner', string='Customer', required=True, ondelete='cascade')
     account_number = fields.Char(string='Deposit Code', readonly=True)
     balance = fields.Float(string='Balance', default=0.0, readonly=True)
