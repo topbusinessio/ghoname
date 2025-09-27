@@ -5,8 +5,8 @@ from odoo import http
 from odoo.http import request
 
 # Import the utility functions from the models file for signature verification
-from odoo.addons.opay_recon.models.opay_recon import _signature_content, _verify_signature
-
+# from odoo.addons.opay_recon.models.opay_recon import _signature_content, _verify_signature
+from odoo.addons.opay_recon.models.opay_config import _signature_content, _verify_signature
 _logger = logging.getLogger(__name__)
 
 class OpayWebhookController(http.Controller):

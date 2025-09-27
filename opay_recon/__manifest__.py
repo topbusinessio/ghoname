@@ -14,7 +14,7 @@ Opay Wallet System:
     'depends': ['sale_management'],
     'data': [
         'data/opay_wallet_data.xml',
-        # 'views/wallet_view.xml',
+        'views/wallet_view.xml',
         'views/res_config_settings_views.xml',
         'views/res_partner_views.xml',
         'views/res_partner_form.xml',               # 👈 NEW: full-width email & phone

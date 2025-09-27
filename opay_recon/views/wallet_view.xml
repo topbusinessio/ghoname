@@ -56,18 +56,4 @@
             </search>
         </field>
     </record>
-
-    <!-- Tree View for opay.payment -->
-    <record id="view_opay_payment_tree" model="ir.ui.view">
-        <field name="name">opay.payment.tree</field>
-        <field name="model">opay.payment</field>
-        <field name="arch" type="xml">
-            <tree string="Payments">
-                <field name="name"/>
-                <field name="amount" widget="monetary" options="{'currency_field': 'currency_id'}"/>
-                <field name="payment_date"/>
-                <field name="sale_order_id"/>
-            </tree>
-        </field>
-    </record>
 </odoo>
