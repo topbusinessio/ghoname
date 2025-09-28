@@ -195,38 +195,6 @@ def build_request_body(request_content, opay_public_key, merchant_private_key, t
     return {"paramContent": enc_data, "sign": sign}
 
 
-# --- Opay Configuration ---
-class OpayConfig(models.Model):
-    _name = 'opay.config'
-    _description = 'Opay Configuration'
-    _inherit = 'res.config.settings'
-
-    client_auth_key = fields.Char(string='Auth Key', required=True)
-    merchant_private_key = fields.Char(string='Merchant Private Key', required=True,
-                                       help="Paste your Base64 encoded RSA Merchant Private Key here.")
-    opay_public_key = fields.Char(string='Public Key', required=True,
-                                  help="Paste Opay’s Base64 encoded RSA Public Key here.")
-    opay_merchant_id = fields.Char(string='Merchant ID', required=True)
-    account_prefix = fields.Char(string='Account Prefix', default='OPAY')
-    is_test_mode = fields.Boolean(string='Test Mode', default=False)
-    use_rsa_signing = fields.Boolean(
-        string="Use RSA Signing",
-        default=True,
-        help="Enable for RSA signatures with private key. Disable for SHA256 hash signing."
-    )
-
-    def set_values(self):
-        super(OpayConfig, self).set_values()
-        params = self.env['ir.config_parameter'].sudo()
-        params.set_param('opay.client_auth_key', self.client_auth_key or '')
-        params.set_param('opay.merchant_private_key', self.merchant_private_key or '')
-        params.set_param('opay.opay_public_key', self.opay_public_key or '')
-        params.set_param('opay.opay_merchant_id', self.opay_merchant_id or '')
-        params.set_param('opay.account_prefix', self.account_prefix or 'OPAY')
-        params.set_param('opay.is_test_mode', self.is_test_mode)
-        params.set_param('opay.use_rsa_signing', self.use_rsa_signing)
-
-
 # --- Opay Wallet ---
 class OpayWallet(models.Model):
     _name = 'opay.wallet'
@@ -241,46 +209,4 @@ class OpayWallet(models.Model):
                                   default=lambda self: self.env.company.currency_id)
     state = fields.Selection([('draft', 'Draft'), ('active', 'Active'), ('suspended', 'Suspended')],
                              default='draft', string='State')
-
-    def _opay_api_request(self, endpoint, request_content):
-        """Handles full Opay API lifecycle (encrypt, sign, call, decrypt, verify)."""
-        params = self.env['ir.config_parameter'].sudo()
-        client_auth_key = params.get_param('opay.client_auth_key', '')
-        merchant_private_key = params.get_param('opay.merchant_private_key', '')
-        opay_public_key = params.get_param('opay.opay_public_key', '')
-        use_rsa = params.get_param('opay.use_rsa_signing') == 'True'
-
-        missing = []
-        if not client_auth_key: missing.append("Client Auth Key")
-        if not merchant_private_key: missing.append("Merchant Private Key")
-        if not opay_public_key: missing.append("Opay Public Key")
-        if missing:
-            raise UserError("Missing Opay configuration parameter(s): %s. "
-                            "Configure under Settings > General Settings." % ", ".join(missing))
-
-        timestamp = str(int(time.time() * 1000))
-
-        # Encrypt business payload with Opay public key
-        param_content = _encrypt_by_public_key(_json_dumps(request_content), opay_public_key)
-
-        # Sign the request
-        sign_string = param_content + timestamp
-        signature = _generate_sign(sign_string, merchant_private_key)
-
-        request_body = {"paramContent": param_content, "sign": signature}
-        headers = {
-            "clientAuthKey": client_auth_key,
-            "version": "V1.0.1",
-            "bodyFormat": "JSON",
-            "timestamp": timestamp,
-        }
-        api_url = f"https://payapi.opayweb.com/api/v2/third/depositcode/{endpoint}"
-
-        try:
-            _logger.info("🔹 Opay Request URL: %s", api_url)
-            _logger.info("🔹 Opay Request Headers: %s", json.dumps(headers, indent=2))
-            _logger.info("🔹 Opay Request Body (paramContent): %s", request_body.get('paramContent'))
-            _logger.info("🔹 Opay Request Body (sign): %s", request_body.get('sign'))
-        except Exception as e:
-            raise UserError(f"An error: {str(e)}")
 

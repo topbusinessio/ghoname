@@ -6,8 +6,9 @@
         <field name="inherit_id" ref="base.view_partner_form"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='category_id']" position="after">
-                <field name="wallet_id"/>
-                <field name="wallet_account_number"/>
+                <field name="create_opay" invisible="wallet_id" readonly="wallet_id"/>
+                <field name="wallet_id" invisible="not wallet_id" />
+                <field name="wallet_account_number" invisible="not wallet_id" />
             </xpath>
         </field>
     </record>

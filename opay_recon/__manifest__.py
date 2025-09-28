@@ -10,7 +10,7 @@ Opay Wallet System:
 - Supports payments and reconciliation
 - Dynamic configuration management (test/live)
     """,
-    'author': 'EWetoye Ibrahim, Stephen',
+    'author': 'Ewetoye Ibrahim',
     'depends': ['sale_management'],
     'data': [
         'data/opay_wallet_data.xml',
