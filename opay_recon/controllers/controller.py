@@ -50,48 +50,71 @@ class OPayWebhookController(http.Controller):
         #         "additionalInformation": '{"pnr":"123","rrn":"310137872249"}',
         #     }
         # }
-
         try:
-            # data = request.jsonrequest.get("data", {})
-            json_data = request.httprequest.get_data().decode('utf-8')
+            headers = request.httprequest.headers
+            # sample headers
+            # {"X-Opay-Tranid": "String", "merchantId": "String"}
+            print("Headers:", headers)
+            if not (headers.get("X-Opay-Tranid") and headers.get("merchantId")):
+                return self.build_response(
+                    "Ignored",
+                    "Missing an expected header parameter",
+                    {"headers": headers},
+                )
+            config_merchant_id = (
+                request.env["ir.config_parameter"]
+                .sudo()
+                .get_param("opay.opay_merchant_id")
+            )
+            if headers.get("merchantId") != config_merchant_id:
+                return self.build_response(
+                    "Ignored",
+                    "Merchant ID mismatch",
+                    {"headers": headers},
+                )
+            json_data = request.httprequest.get_data().decode("utf-8")
             payload = json.loads(json_data)
-            if not payload["data"]:
-                return {"error": "Missing data"}, 400
-            data = payload["data"]
-            # Only process successful and known account payments
+            data = payload.get("data", {})
+            if not data:
+                return self.build_response("Error", "Missing data", data), 400
+            print("Data:", data)
+            if data.get("status") != "SUCCESS":
+                return self.build_response("ignored", "Payment not successful", data)
             wallet = (
                 request.env["opay.wallet"]
                 .sudo()
-                .search([("account_number", "=", data.get("recipientAccount"))], limit=1)
+                .search([("account_number", "=", data.get("receiptAccount"))], limit=1)
             )
-            if not wallet or data.get("status") != "SUCCESS":
-                _logger.info(
-                    f"OPay payment {data.get('orderNo')} status: {data.get('status')}"
+            print(data.get("receiptAccount"))
+            print(wallet)
+            if not wallet:
+                return self.build_response(
+                    "Ignored", "Not an existing wallet account", data
                 )
-                return {"status": "ignored", "message": "Payment not successful", "data": data}
             # Check if payment already exists
             existing_payment = (
                 request.env["account.payment"]
                 .sudo()
-                .search([("opay_order_no", "=", data.get("orderNo"))], limit=1)
+                .search([("ref", "=", headers.get("X-Opay-Tranid"))], limit=1)
             )
-
             if existing_payment:
                 return self.handle_existing_payment(existing_payment, data)
-
             # Create new payment with sale order linking
+            data.update({
+                "currency_id": request.env["res.currency"].sudo().search([
+                    ("name", "=", data.get("currency", "NGN"))], limit=1).id,
+                "header_tran_id": headers.get("X-Opay-Tranid"),
+            })
             payment = self.create_opay_payment(wallet.partner_id, data)
-
-            return {
-                "status": "success",
-                "payment_id": payment.id,
-                "sale_order_linked": bool(payment.sale_order_id),
-                "message": "Payment processed successfully",
-            }
-
+            # Add payment to wallet
+            wallet.write({"payments": [(4, payment.id)]})
+            return self.build_response(
+                "success", "Payment processed successfully", {"payment_id": payment.id}
+            )
         except Exception as e:
-            _logger.error(f"OPay webhook error: {str(e)}")
-            return {"error": "Internal server error"}, 500
+            return self.build_response(
+                "Exception", "Internal Server Error", {str(e)}
+            )
 
     def handle_existing_payment(self, payment, data):
         """Handle case where payment already exists"""
@@ -102,12 +125,7 @@ class OPayWebhookController(http.Controller):
                 "opay_additional_info": data.get("additionalInformation", ""),
             }
         )
-
-        return {
-            "status": "duplicate",
-            "payment_id": payment.id,
-            "message": "Payment already processed",
-        }
+        return self.build_response("Duplicate", "Payment already processed", data)
 
     def create_opay_payment(self, partner, data):
         """Create an account.payment from OPay webhook data with sale order linking"""
@@ -168,10 +186,14 @@ class OPayWebhookController(http.Controller):
             opay_method = (
                 request.env["account.payment.method"]
                 .sudo()
-                .create({"name": "OPay",
+                .create(
+                    {
+                        "name": "OPay",
                         "is_opay": True,
                         "code": "opay",
-                        "payment_type": "inbound",})
+                        "payment_type": "inbound",
+                    }
+                )
             )
         return opay_method
 
@@ -182,17 +204,19 @@ class OPayWebhookController(http.Controller):
             "payment_type": "inbound",
             "partner_id": partner.id,
             "amount": amount,
-            "currency_id": request.env.ref("base.NGN").id,
+            "currency_id": data.get("currency_id"),
             "payment_method_id": opay_method.id,
-            "ref": data.get("outOrderNo") or data.get("orderNo"),
-            "opay_order_no": data.get("orderNo"),
+            "ref": data.get("header_tran_id"),
+            "opay_order_no": data.get("outOrderNo") or data.get("orderNo"),
             "opay_pay_no": data.get("payNo"),
             "opay_merchant_id": data.get("merchantId"),
             "opay_status": data.get("status"),
             "opay_sender_name": data.get("senderName"),
             "opay_sender_account": data.get("senderAccount"),
             "opay_settlement_amount": float(data.get("settlementAmount", 0)),
-            "opay_transaction_time": self.convert_timestamp(data.get("transactionTime")),
+            "opay_transaction_time": self.convert_timestamp(
+                data.get("transactionTime")
+            ),
             "opay_additional_info": data.get("additionalInformation", ""),
             "date": fields.Date.today(),
         }
@@ -214,9 +238,14 @@ class OPayWebhookController(http.Controller):
         """Convert OPay timestamp to Odoo datetime"""
         if timestamp_str:
             from datetime import datetime
+
             try:
                 timestamp = int(timestamp_str) / 1000
                 return datetime.fromtimestamp(timestamp)
             except (ValueError, TypeError):
                 pass
         return fields.Datetime.now()
+
+    def build_response(self, status, message, data):
+        _logger.info(f"OPay payment: {status}: {data}")
+        return {"status": status, "message": message, "data": data}

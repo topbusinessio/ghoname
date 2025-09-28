@@ -20,7 +20,7 @@
                     </group>
                     <!-- Wallet Details -->
                     <group string="Wallet Details">
-                        <field name="state"/>
+                        <!-- <field name="state"/> -->
                         <field name="create_date" readonly="1"/>
                         <field name="write_date" readonly="1"/>
                     </group>

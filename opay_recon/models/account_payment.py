@@ -16,3 +16,4 @@ class AccountPayment(models.Model):
     opay_settlement_amount = fields.Float(string='Settlement Amount')
     opay_transaction_time = fields.Datetime(string='Transaction Time')
     opay_additional_info = fields.Text(string='Additional Information')
+    opay_wallet_id = fields.Many2one('opay.wallet', string='OPay Wallet')

@@ -1,0 +1,40 @@
+<!-- views/account_payment_views.xml -->
+<odoo>
+    <record id="view_account_payment_opay_filter" model="ir.ui.view">
+        <field name="name">account.payment.opay.filter</field>
+        <field name="model">account.payment</field>
+        <field name="inherit_id" ref="account.view_account_payment_search"/>
+        <field name="arch" type="xml">
+            <xpath expr="//search" position="inside">
+                <filter string="OPay Payments" name="opay_payments" 
+                        domain="[('payment_method_id.is_opay', '=', True)]"/>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="view_account_payment_form_opay" model="ir.ui.view">
+        <field name="name">account.payment.form.opay</field>
+        <field name="model">account.payment</field>
+        <field name="inherit_id" ref="account.view_account_payment_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//group[@name='main_group']" position="after">
+                <field name="payment_method_id" invisible="1"/>
+                <group string="OPay Details"  name="opay_payment" invisible="payment_method_id.is_opay">
+                    <group>
+                        <field name="opay_order_no"/>
+                        <field name="opay_pay_no"/>
+                        <field name="opay_merchant_id"/>
+                        <field name="opay_status"/>
+                    </group>
+                    <group>
+                        <field name="opay_sender_name"/>
+                        <field name="opay_sender_account"/>
+                        <field name="opay_settlement_amount"/>
+                        <field name="opay_transaction_time"/>
+                        <field name="opay_additional_info"/>
+                    </group>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>

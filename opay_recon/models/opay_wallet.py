@@ -207,6 +207,7 @@ class OpayWallet(models.Model):
     balance = fields.Float(string='Balance', default=0.0, readonly=True)
     currency_id = fields.Many2one('res.currency', string='Currency', required=True,
                                   default=lambda self: self.env.company.currency_id)
-    state = fields.Selection([('draft', 'Draft'), ('active', 'Active'), ('suspended', 'Suspended')],
-                             default='draft', string='State')
+    # state = fields.Selection([('draft', 'Draft'), ('active', 'Active'), ('suspended', 'Suspended')],
+    #                          default='draft', string='State')
+    payments = fields.One2many('account.payment', 'opay_wallet_id', string='Payments')
 
