@@ -6,54 +6,40 @@
         <field name="model">opay.wallet</field>
         <field name="arch" type="xml">
             <form string="Opay Wallet">
+                <header>
+                    <button name="get_balance" id="get_balance" data-hotkey="q"
+                    string="Update Balance" class="btn-primary" type="object" />
+                </header>
                 <sheet>
                     <group>
                         <group>
+                            <field name="reference"/>
                             <field name="name"/>
                             <field name="partner_id"/>
-                            <field name="currency_id"/>
+                            <field name="create_date"/>
                         </group>
                         <group>
-                            <field name="account_number" readonly="1"/>
+                            <field name="account_number"/>
                             <field name="balance" widget="monetary" options="{'currency_field': 'currency_id'}"/>
+                            <field name="last_query" />
                         </group>
-                    </group>
-                    <!-- Wallet Details -->
-                    <group string="Wallet Details">
-                        <!-- <field name="state"/> -->
-                        <field name="create_date" readonly="1"/>
-                        <field name="write_date" readonly="1"/>
                     </group>
                 </sheet>
             </form>
         </field>
     </record>
-
     <!-- Tree View for opay.wallet -->
     <record id="view_opay_wallet_tree" model="ir.ui.view">
         <field name="name">opay.wallet.tree</field>
         <field name="model">opay.wallet</field>
         <field name="arch" type="xml">
             <tree string="Opay Wallets">
+                <field name="reference"/>
                 <field name="name"/>
                 <field name="partner_id"/>
                 <field name="account_number"/>
                 <field name="balance" widget="monetary" options="{'currency_field': 'currency_id'}"/>
             </tree>
-        </field>
-    </record>
-
-    <!-- Search View for opay.wallet -->
-    <record id="view_opay_wallet_search" model="ir.ui.view">
-        <field name="name">opay.wallet.search</field>
-        <field name="model">opay.wallet</field>
-        <field name="arch" type="xml">
-            <search string="Search Opay Wallets">
-                <field name="partner_id"/>
-                <field name="account_number"/>
-                <filter name="balance_greater_than_100" string="Balance &gt; 100" domain="[('balance', '&gt;', 100)]"/>
-                <filter name="balance_less_than_100" string="Balance &lt; 100" domain="[('balance', '&lt;', 100)]"/>
-            </search>
         </field>
     </record>
 </odoo>
