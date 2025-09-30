@@ -1,19 +1,9 @@
 # -*- coding: utf-8 -*-
 import logging
-import random
-import string
-import requests
-import json
-import time
-import base64
-from odoo import models, fields, api
+
+from odoo import _, models, fields, api
 from odoo.exceptions import UserError
 
-# --- Opay RSA-related imports ---
-from Crypto.Cipher import PKCS1_v1_5
-from Crypto.Hash import SHA256
-from Crypto.PublicKey import RSA
-from Crypto.Signature import pkcs1_15
 
 from . import helpers
 
@@ -23,15 +13,21 @@ class OpayWallet(models.Model):
     _name = 'opay.wallet'
     _description = 'Opay Wallet'
 
-    name = fields.Char(string='Account Name', required=True)
-    reference = fields.Char(string='Reference', readonly=True, copy=False)
-    partner_id = fields.Many2one('res.partner', string='Customer', required=True, ondelete='cascade')
-    account_number = fields.Char(string='Deposit Code', readonly=True)
-    balance = fields.Float(string='Balance', default=0.0, readonly=True)
+    name = fields.Char(required=True, readonly=True,)
+    reference = fields.Char(readonly=True, copy=False)
+    partner_id = fields.Many2one('res.partner', string='Customer', required=True, ondelete='cascade', readonly=True)
+    account_number = fields.Char(readonly=True)
+    balance = fields.Float(readonly=True)
     currency_id = fields.Many2one('res.currency', string='Currency', required=True,
-                                  default=lambda self: self.env.company.currency_id)
-    payments = fields.One2many('account.payment', 'opay_wallet_id', string='Payments')
+                                  default=lambda self: self.env.company.currency_id, readonly=True)
+    payments = fields.One2many('account.payment', 'opay_wallet_id')
+    payment_count = fields.Integer(compute='_compute_payment_count')
     last_query = fields.Datetime(string='Last Balance Query', readonly=True)
+
+    @api.depends('payments')
+    def _compute_payment_count(self):
+        for wallet in self:
+            wallet.payment_count = self.env['account.payment'].sudo().search_count([('opay_wallet_id', '=', wallet.id)])
 
     def get_balance(self):
         self.ensure_one()
@@ -55,6 +51,22 @@ class OpayWallet(models.Model):
                 'balance': balance_info.get('amount', 0.0),
                 'last_query': balance_info.get('timestamp', fields.Datetime.now())
             })
+            return True
         except Exception as e:
-            _logger.error(f"Failed to fetch Opay wallet balance: {e}")
-            raise UserError(f"Failed to fetch Opay wallet balance: {e}")
+            self.env['bus.bus']._sendone(self.env.user.partner_id, 'simple_notification', {
+                'type': 'danger',
+                'title': _("Warning"),
+                'message': _(f"Failed to fetch Opay wallet balance: {e}")
+            })
+            return False
+
+    def action_payments(self):
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': 'Payments',
+            'view_mode': 'tree',
+            'res_model': 'account.payment',
+            'domain': [('opay_wallet_id', '=', self.id)],
+            # 'context': "{'create': False}"
+        }

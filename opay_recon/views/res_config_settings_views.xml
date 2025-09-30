@@ -31,18 +31,4 @@
             </xpath>
         </field>
     </record>
-
-    <!-- Action and Menu items for the configuration -->
-    <record id="opay_config_settings_action" model="ir.actions.act_window">
-        <field name="name">Opay Configuration</field>
-        <field name="res_model">res.config.settings</field>
-        <field name="view_mode">form</field>
-        <field name="target">new</field>
-        <field name="context">{'module': 'opay_wallet'}</field>
-    </record>
-
-    <menuitem id="menu_opay_config_settings"
-              name="Opay Configuration"
-              parent="base.menu_administration"
-              action="opay_config_settings_action"/>
 </odoo>

@@ -61,11 +61,11 @@ def _decrypt_by_private_key(text, private_key):
     """Decrypt ciphertext with private key (RSA, auto-detect block size)."""
     key = _import_rsa_key(private_key, key_type="private")
     cipher = PKCS1_v1_5.new(key)
-    try:
-        encrypted_data = base64.b64decode(text)
-    except Exception as e:
-        _logger.error("Decryption failed: input is not a valid base64 string. Details: %s", e)
-        raise UserError(f"Encrypted response is not valid Base64: {e}")
+    # try:
+    encrypted_data = base64.b64decode(text)
+    # except Exception as e:
+    #     _logger.error("Decryption failed: input is not a valid base64 string. Details: %s", e)
+    #     raise UserError(f"Encrypted response is not valid Base64: {e}")
 
     key_bytes = key.size_in_bytes()
     offset = 0
@@ -149,7 +149,7 @@ def _analytic_response(response_content, opay_public_key, merchant_private_key):
     # Verify Opay signature
     _verify_rsa_response_sign(response_content, opay_public_key)
 
-    data = response_content.get('data')
+    data = response_content.get('data') or response_content.get('paramContent')
     if data is None:
         return {}
 
@@ -257,11 +257,11 @@ def query_wallet_balance(deposit_code, o_client_auth_key, o_merchant_id, o_publi
         "depositCode": deposit_code,
     }
     request_body = _build_request_body(request_contents, o_public_key, o_merchant_private_key, timestamp)
-    print("Request headers to Opay service: ", headers)
+    # print("Request headers to Opay service: ", headers)
     response = requests.post(url, json=request_body, headers=headers)
-    print("First Response to Opay wallet balance query:", response)
+    # print("First Response to Opay wallet balance query:", type(response), response)
     response_json = response.json()
-    print("Response from Opay wallet balance query:", response_json)
+    # print("ResponseJson", type(response_json), response_json)
     response_data = _analytic_response(response_json, o_public_key, o_merchant_private_key)
     # Sample Reponse Data
     # return {
@@ -274,8 +274,7 @@ def query_wallet_balance(deposit_code, o_client_auth_key, o_merchant_id, o_publi
     #         "currency": "NGN",
     #         "queryTime": "2022-09-29 08:47:55"
     #     }
-    print("Response data from Opay wallet balance query:", response_data)
-     # Raise exception if code is not 0000
-    if response_data.get("code") != "0000":
+    # print("Response data from Opay wallet balance query:", response_data)
+    if response_data.get("code") != "00000":
         raise ValidationError(f"Opay wallet balance failed: {response_data.get('message', 'Unknown error')}")
     return response_data.get("data", {})

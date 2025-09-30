@@ -22,16 +22,14 @@
                 <group string="OPay Details"  name="opay_payment" invisible="payment_method_id.is_opay">
                     <group>
                         <field name="opay_order_no"/>
-                        <field name="opay_pay_no"/>
+                        <field name="opay_notes"/>
                         <field name="opay_merchant_id"/>
                         <field name="opay_status"/>
                     </group>
                     <group>
                         <field name="opay_sender_name"/>
                         <field name="opay_sender_account"/>
-                        <field name="opay_settlement_amount"/>
                         <field name="opay_transaction_time"/>
-                        <field name="opay_additional_info"/>
                     </group>
                 </group>
             </xpath>

@@ -5,6 +5,8 @@ from odoo import http, fields
 from odoo.http import request, Response
 from odoo.exceptions import ValidationError
 
+from ..models import helpers
+
 _logger = logging.getLogger(__name__)
 
 
@@ -14,79 +16,40 @@ class OPayWebhookController(http.Controller):
         "/opay/webhook", type="json", auth="public", methods=["POST"], csrf=False
     )
     def opay_webhook_handler(self):
-        # Sample Response
-        # {
-        #     "data": {
-        #         "outOrderNo": "2334345345345211",
-        #         "orderNo": "20220704741380171865833472",
-        #         "payNo": "2334345345345245",
-        #         "headMerchantId": "256622022480363",
-        #         "merchantId": "256622022480364",
-        #         "status": "SUCCESS",
-        #         "errorMsg": "Not sufficient funds",
-        #         "senderName": "LUJUN SUN",
-        #         "senderBank": "ubaBank",
-        #         "senderAccount": "2131****09",
-        #         "recipientName": "LUJUN SUN",
-        #         "receiptBank": "opay",
-        #         "receiptAccount": "6119787331",
-        #         "amount": "300.00",
-        #         "fee": "1.50",
-        #         "feePattern": "IN_DEDUCT",
-        #         "payMethod": "BankCard",
-        #         "settlementAmount": "100.00",
-        #         "settlementFee": "10.00",
-        #         "settlementFeePattern": "OUT_DEDUCT",
-        #         "currency": "NGN",
-        #         "isSplit": "Y",
-        #         "splitInfo": [
-        #             {"splitMerchantId": "25623232423432", "splitAmount": "20.00"}
-        #         ],
-        #         "productInfo": "",
-        #         "sn": "XXXX",
-        #         "remark": "static virtual account",
-        #         "transactionTime": "1692773950143",
-        #         "completedTime": "1692773950143",
-        #         "additionalInformation": '{"pnr":"123","rrn":"310137872249"}',
-        #     }
-        # }
         try:
-            headers = request.httprequest.headers
-            # sample headers
-            # {"X-Opay-Tranid": "String", "merchantId": "String"}
-            print("Headers:", headers)
-            if not (headers.get("X-Opay-Tranid") and headers.get("merchantId")):
-                return self.build_response(
-                    "Ignored",
-                    "Missing an expected header parameter",
-                    {"headers": headers},
+            json_data = request.httprequest.get_json(silent=True)
+            # print("JSON Data:", json_data)
+            response = helpers._decrypt_by_private_key(
+                json_data.get("paramContent"), 
+                request.env['ir.config_parameter'].sudo().get_param('opay.merchant_private_key'),
                 )
+            # Sample Response
+            # '{"depositAmount":"50.00","senderAccount":"1003217490","orderNo":"250929060200455237613933","notes":"Transfer/ To GHONIM MOON LTD-Ewetoye Test/6124785974","fee":"0.15","formatDateTime":"2025-09-29 23:58:07","stampDutyPattern":"","depositFee":"0","depositTime":"1759186687000","transactionId":"202509291170295632021241856","merchantName":"GHONIM MOON LTD-Ewetoye Test","reference":"","senderName":"Ibrahim Ewetoye","payType":"COLLECTION","depositCode":"6124785974","merchantId":"256625041017171","stampDutyAmount":"0.00","currency":"NGN","refId":"000000056","senderBank":"VFD MFB","stampDutyChargeId":"","status":"SUCCESS"}'
+            
+            # response = helpers._analytic_response(
+            #     json_data,
+            #     request.env['ir.config_parameter'].sudo().get_param('opay.opay_public_key', default=False),
+            #     request.env['ir.config_parameter'].sudo().get_param('opay.opay_merchant_id', default=False),
+            #     )
+            data = json.loads(response)
             config_merchant_id = (
                 request.env["ir.config_parameter"]
                 .sudo()
                 .get_param("opay.opay_merchant_id")
             )
-            if headers.get("merchantId") != config_merchant_id:
+            if data.get("merchantId") != config_merchant_id:
                 return self.build_response(
                     "Ignored",
                     "Merchant ID mismatch",
-                    {"headers": headers},
+                    data,
                 )
-            json_data = request.httprequest.get_data().decode("utf-8")
-            payload = json.loads(json_data)
-            data = payload.get("data", {})
-            if not data:
-                return self.build_response("Error", "Missing data", data), 400
-            print("Data:", data)
             if data.get("status") != "SUCCESS":
                 return self.build_response("ignored", "Payment not successful", data)
             wallet = (
                 request.env["opay.wallet"]
                 .sudo()
-                .search([("account_number", "=", data.get("receiptAccount"))], limit=1)
+                .search([("account_number", "=", data.get("depositCode"))], limit=1)
             )
-            print(data.get("receiptAccount"))
-            print(wallet)
             if not wallet:
                 return self.build_response(
                     "Ignored", "Not an existing wallet account", data
@@ -95,36 +58,23 @@ class OPayWebhookController(http.Controller):
             existing_payment = (
                 request.env["account.payment"]
                 .sudo()
-                .search([("ref", "=", headers.get("X-Opay-Tranid"))], limit=1)
+                .search([("ref", "=", data.get("transactionId"))], limit=1)
             )
             if existing_payment:
                 return self.handle_existing_payment(existing_payment, data)
             # Create new payment with sale order linking
-            data.update({
-                "currency_id": request.env["res.currency"].sudo().search([
-                    ("name", "=", data.get("currency", "NGN"))], limit=1).id,
-                "header_tran_id": headers.get("X-Opay-Tranid"),
-            })
+            data["currency_id"] = request.env["res.currency"].sudo().search([
+                    ("name", "=", data.get("currency", "NGN"))], limit=1).id
             payment = self.create_opay_payment(wallet.partner_id, data)
-            # Add payment to wallet
-            wallet.write({"payments": [(4, payment.id)]})
-            return self.build_response(
-                "success", "Payment processed successfully", {"payment_id": payment.id}
-            )
+            return self.build_response("success", "Payment processed successfully",
+                                       {"payment_id": payment.id})
         except Exception as e:
-            return self.build_response(
-                "Exception", "Internal Server Error", {str(e)}
-            )
+            return self.build_response("Exception", "Internal Server Error", {str(e)})
 
     def handle_existing_payment(self, payment, data):
         """Handle case where payment already exists"""
         # Update payment status or other fields if needed
-        payment.write(
-            {
-                "opay_status": data.get("status"),
-                "opay_additional_info": data.get("additionalInformation", ""),
-            }
-        )
+        payment.write({"opay_status": data.get("status")})
         return self.build_response("Duplicate", "Payment already processed", data)
 
     def create_opay_payment(self, partner, data):
@@ -199,25 +149,22 @@ class OPayWebhookController(http.Controller):
 
     def prepare_payment_vals(self, data, partner, opay_method, sale_order):
         """Prepare payment values dictionary"""
-        amount = float(data.get("amount", 0))
         payment_vals = {
-            "payment_type": "inbound",
+            "payment_type": "inbound" if data.get("payType") == "COLLECTION" else "outbound",
             "partner_id": partner.id,
-            "amount": amount,
-            "currency_id": data.get("currency_id"),
+            "amount": data["depositAmount"],
+            "currency_id": data["currency_id"],
             "payment_method_id": opay_method.id,
-            "ref": data.get("header_tran_id"),
-            "opay_order_no": data.get("outOrderNo") or data.get("orderNo"),
-            "opay_pay_no": data.get("payNo"),
+            "ref": data["transactionId"],
+            "opay_order_no": data.get("orderNo"),
+            "opay_notes": data.get("notes"),
             "opay_merchant_id": data.get("merchantId"),
             "opay_status": data.get("status"),
             "opay_sender_name": data.get("senderName"),
             "opay_sender_account": data.get("senderAccount"),
-            "opay_settlement_amount": float(data.get("settlementAmount", 0)),
             "opay_transaction_time": self.convert_timestamp(
-                data.get("transactionTime")
+                data.get("depositTime")
             ),
-            "opay_additional_info": data.get("additionalInformation", ""),
             "date": fields.Date.today(),
         }
         # If sale order found, set communication and link

@@ -11,6 +11,20 @@
                     string="Update Balance" class="btn-primary" type="object" />
                 </header>
                 <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button class="oe_stat_button" name="action_payments"
+                                    type="object" icon="fa-bars"
+                                    invisible="payment_count != 0">
+                            <div class="o_stat_info">
+                                <span class="o_stat_value">
+                                    <field name="payment_count"/>
+                                </span>
+                                <span class="o_stat_text">
+                                        Payments
+                                    </span>
+                            </div>
+                        </button>
+                    </div>
                     <group>
                         <group>
                             <field name="reference"/>
