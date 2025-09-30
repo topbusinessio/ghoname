@@ -9,7 +9,7 @@
     </record>
 
     <!-- Menu items for Opay Wallet and Payments -->
-    <menuitem id="opay_wallet_root_menu" name="Opay Wallet" web_icon="opay_wallet,static/description/icon.png"/>
+    <menuitem id="opay_wallet_root_menu" name="Opay Wallet" web_icon="opay_wallet,static/description/logo.png"/>
     
     <record id="action_opay_wallet" model="ir.actions.act_window">
         <field name="name">Opay Wallets</field>

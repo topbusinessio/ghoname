@@ -1,15 +1,9 @@
 # -*- coding: utf-8 -*-
 {
-    'name': 'Opay Wallet Generation',
+    'name': 'Opay Wallet',
     'version': '1.0',
     'category': 'Accounting',
-    'summary': 'Automates Opay wallet generation, payments, and reconciliation',
-    'description': """
-Opay Wallet System:
-- Automates wallet generation for customers
-- Supports payments and reconciliation
-- Dynamic configuration management (test/live)
-    """,
+    'summary': 'Opay Wallet Integration for Odoo | Automatically assign wallet account and record payments to Opay Wallet',
     'author': 'Ewetoye Ibrahim',
     'depends': ['sale_management'],
     'data': [
@@ -25,6 +19,7 @@ Opay Wallet System:
     'qweb': [],
     'installable': True,
     'application': True,
+    'license': 'OPL-1',
     'external_dependencies': {
         'python': ['pycryptodome'],
     },
