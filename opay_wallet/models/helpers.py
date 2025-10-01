@@ -245,36 +245,3 @@ def create_opay_wallet(o_client_auth_key, o_merchant_private_key, o_public_key, 
         if response_data.get("code") != "00000":
             raise ValidationError(f"Opay wallet creation failed: {response_data.get('message', 'Unknown error')}")
         return response_data
-        
-
-def query_wallet_balance(deposit_code, o_client_auth_key, o_merchant_id, o_public_key, o_merchant_private_key):
-    """Query Opay wallet balance by deposit code."""
-    url = "https://payapi.opayweb.com/api/v2/third/depositcode/queryWalletBalance"
-    timestamp = str(int(time.time() * 1000))
-    headers = _build_request_headers(o_client_auth_key, timestamp)
-    request_contents = {
-        "opayMerchantId": o_merchant_id,
-        "depositCode": deposit_code,
-    }
-    request_body = _build_request_body(request_contents, o_public_key, o_merchant_private_key, timestamp)
-    # print("Request headers to Opay service: ", headers)
-    response = requests.post(url, json=request_body, headers=headers)
-    # print("First Response to Opay wallet balance query:", type(response), response)
-    response_json = response.json()
-    # print("ResponseJson", type(response_json), response_json)
-    response_data = _analytic_response(response_json, o_public_key, o_merchant_private_key)
-    # Sample Reponse Data
-    # return {
-    #     "code": "00000",
-    #     "message": "SUCCESSFUL",
-    #     "data": {
-    #         "name": "Ewetoye Ibrahim",
-    #         "refId": "refer1200000850",
-    #         "amount": "234",
-    #         "currency": "NGN",
-    #         "queryTime": "2022-09-29 08:47:55"
-    #     }
-    # print("Response data from Opay wallet balance query:", response_data)
-    if response_data.get("code") != "00000":
-        raise ValidationError(f"Opay wallet balance failed: {response_data.get('message', 'Unknown error')}")
-    return response_data.get("data", {})

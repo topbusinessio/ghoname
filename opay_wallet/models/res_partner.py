@@ -15,9 +15,6 @@ class Partner(models.Model):
     wallet_account_number = fields.Char(
         "Opay Wallet Number", related="wallet_id.account_number", readonly=True
     )
-    wallet_balance = fields.Float(
-        "Opay Wallet Balance", related="wallet_id.balance", readonly=True
-    )
     create_opay = fields.Boolean(
         default=False, help="Check this to create Opay Wallet for this partner"
     )
@@ -32,20 +29,11 @@ class Partner(models.Model):
     def _on_create_opay_change(self):
         for partner in self:
             if partner.create_opay and not partner.wallet_id:
+                if not partner.email:
+                    raise ValidationError(
+                        _("Email address is required to create an Opay wallet.")
+                    )
                 partner._create_opay_wallet()
-        return partner
-
-    @api.model
-    def create(self, vals):
-        # Create the partner record first
-        if not vals.get("email"):
-            raise ValidationError(
-                _("Email address is required for creating a partner.")
-            )
-        partner = super(Partner, self).create(vals)
-        # Then create the Opay wallet for the partner
-        if vals.get("create_opay"):
-            partner._create_opay_wallet()
         return partner
 
     def _create_opay_wallet(self):
