@@ -130,7 +130,7 @@ class OPayWebhookController(http.Controller):
         opay_method = (
             request.env["account.payment.method"]
             .sudo()
-            .search([("is_opay", "=", True)], limit=1)
+            .search([("code", "=", "opay")], limit=1)
         )
         if not opay_method:
             opay_method = (
