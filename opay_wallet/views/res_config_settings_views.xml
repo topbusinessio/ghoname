@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <record id="res_config_settings_view_form_opay" model="ir.ui.view">
-        <field name="name">res.config.settings.view.form.opay</field>
+    <record id="res_config_settings_view_form" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.inherit</field>
         <field name="model">res.config.settings</field>
         <field name="inherit_id" ref="base.res_config_settings_view_form"/>
         <field name="arch" type="xml">
@@ -22,10 +22,6 @@
                     <div class="content-group mt16">
                         <label for="opay_merchant_private_key" class="o_light_label mr8"/>
                         <field name="opay_merchant_private_key"/>
-                    </div>
-                    <div class="content-group mt16">
-                        <label for="opay_account_prefix" class="o_light_label mr8"/>
-                        <field name="opay_account_prefix"/>
                     </div>
                 </setting>
             </xpath>

@@ -14,4 +14,3 @@ class AccountPayment(models.Model):
     opay_sender_name = fields.Char(string='Sender Name')
     opay_sender_account = fields.Char(string='Sender Account')
     opay_transaction_time = fields.Datetime(string='Transaction Time')
-    opay_wallet_id = fields.Many2one('opay.wallet', string='OPay Wallet')

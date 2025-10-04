@@ -45,12 +45,12 @@ class OPayWebhookController(http.Controller):
                 )
             if data.get("status") != "SUCCESS":
                 return self.build_response("ignored", "Payment not successful", data)
-            wallet = (
-                request.env["opay.wallet"]
+            partner = (
+                request.env["res.partner"]
                 .sudo()
-                .search([("account_number", "=", data.get("depositCode"))], limit=1)
+                .search([("opay_account_number", "=", data.get("depositCode"))], limit=1)
             )
-            if not wallet:
+            if not partner:
                 return self.build_response(
                     "Ignored", "Not an existing wallet account", data
                 )
@@ -65,7 +65,7 @@ class OPayWebhookController(http.Controller):
             # Create new payment with sale order linking
             data["currency_id"] = request.env["res.currency"].sudo().search([
                     ("name", "=", data.get("currency", "NGN"))], limit=1).id
-            payment = self.create_opay_payment(wallet.partner_id, data)
+            payment = self.create_opay_payment(partner, data)
             return self.build_response("success", "Payment processed successfully",
                                        {"payment_id": payment.id})
         except Exception as e:
@@ -185,7 +185,6 @@ class OPayWebhookController(http.Controller):
         """Convert OPay timestamp to Odoo datetime"""
         if timestamp_str:
             from datetime import datetime
-
             try:
                 timestamp = int(timestamp_str) / 1000
                 return datetime.fromtimestamp(timestamp)

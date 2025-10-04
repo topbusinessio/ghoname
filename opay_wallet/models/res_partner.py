@@ -6,18 +6,11 @@ from . import helpers
 class Partner(models.Model):
     _inherit = "res.partner"
 
-    wallet_id = fields.Many2one(
-        "opay.wallet", "Opay Wallet", readonly=True, _compute="_create_opay_wallet"
-    )
-    wallet_name = fields.Char(
-        "Opay Wallet Name", related="wallet_id.name", readonly=True
-    )
-    wallet_account_number = fields.Char(
-        "Opay Wallet Number", related="wallet_id.account_number", readonly=True
-    )
     create_opay = fields.Boolean(
         default=False, help="Check this to create Opay Wallet for this partner"
     )
+    opay_wallet_ref = fields.Char(readonly=True, copy=False)
+    opay_account_number = fields.Char(readonly=True, copy=False)
 
     @api.constrains("email")
     def _check_email_required(self):
@@ -28,7 +21,7 @@ class Partner(models.Model):
     @api.constrains("create_opay")
     def _on_create_opay_change(self):
         for partner in self:
-            if partner.create_opay and not partner.wallet_id:
+            if partner.create_opay and not partner.opay_wallet_ref:
                 if not partner.email:
                     raise ValidationError(
                         _("Email address is required to create an Opay wallet.")
@@ -67,13 +60,11 @@ class Partner(models.Model):
                 "Opay configuration is incomplete. Please check the settings."
             )
         response_data = helpers.create_opay_wallet(o_client_auth_key, o_merchant_private_key, o_public_key, o_merchant_id, self)
-        wallet = self.env["opay.wallet"].create(
+        
+        self.write(
             {
-                "partner_id": self.id,
-                "name": self.name,
-                "reference": response_data["data"]["refId"],
-                "account_number": response_data["data"]["depositCode"],
+                "opay_wallet_ref": response_data["data"]["refId"],
+                "opay_account_number": response_data["data"]["depositCode"],
             }
         )
-        self.wallet_id = wallet.id
         self.message_post(body="Opay wallet created successfully.")

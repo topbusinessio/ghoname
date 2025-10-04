@@ -7,14 +7,10 @@
     'author': 'Ewetoye Ibrahim',
     'depends': ['sale_management', 'account_payment'],
     'data': [
-        'data/opay_wallet_data.xml',
         'views/account_payment.xml',
-        'views/wallet_view.xml',
         'views/res_config_settings_views.xml',
         'views/res_partner_views.xml',
-        'views/res_partner_form.xml',       # 👈 NEW: full-width email & phone
-        'views/sale_order_views.xml',       # show wallet in quotation/delivery address
-        'security/ir.model.access.csv',
+        'views/sale_order_views.xml',
     ],
     'qweb': [],
     'installable': True,

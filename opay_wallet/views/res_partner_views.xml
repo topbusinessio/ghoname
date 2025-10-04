@@ -1,14 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <record id="res_partner_view_form_inherit_opay" model="ir.ui.view">
-        <field name="name">res.partner.view.form.inherit.opay</field>
+    <record id="res_partner_view_form_inherit" model="ir.ui.view">
+        <field name="name">res.partner.view.form.inherit</field>
         <field name="model">res.partner</field>
         <field name="inherit_id" ref="base.view_partner_form"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='category_id']" position="after">
-                <field name="create_opay" invisible="wallet_id" readonly="wallet_id"/>
-                <field name="wallet_id" invisible="not wallet_id" />
-                <field name="wallet_account_number" invisible="not wallet_id" />
+                <field name="create_opay" invisible="opay_wallet_ref" readonly="opay_wallet_ref"/>
+                <field name="opay_wallet_ref" invisible="not opay_wallet_ref" />
+                <field name="opay_account_number" invisible="not opay_wallet_ref" />
+            </xpath>
+        </field>
+    </record>
+    <record id="res_partner_view_tree_inherit" model="ir.ui.view">
+        <field name="name">res.partner.view.tree.inherit</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='email']" position="after">
+                <field name="opay_account_number" optional="show"/>
             </xpath>
         </field>
     </record>

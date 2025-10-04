@@ -209,7 +209,6 @@ def create_opay_wallet(o_client_auth_key, o_merchant_private_key, o_public_key, 
         # Request content
         request_contents = {
             "opayMerchantId": o_merchant_id,
-            # ref_id is account prefix + partner id
             "refId": f"{partner.id:09d}",
             "name": partner.name,
             "email": partner.email,
