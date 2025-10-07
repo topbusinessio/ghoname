@@ -36,13 +36,15 @@ class ResPartner(models.Model):
         company = self.env.company.sudo()
         if res.customer_rank > 0 and res.unique_id == '/':
             if company.next_code:
-                res.unique_id = company.next_code
-                res.name = '[' + str(company.next_code) + ']' + str(
+                cid = 'GN-'+str(company.next_code)
+                res.unique_id = cid
+                res.name = '[' + cid + ']' + str(
                     res.name)
                 company.write({'next_code': company.next_code + 1})
             else:
-                res.unique_id = company.customer_code
-                res.name = '[' + str(company.customer_code) + ']' + str(
+                cid = 'GN-'+str(company.customer_code)
+                res.unique_id = cid
+                res.name = '[' + cid + ']' + str(
                     res.name)
                 company.write({'next_code': company.customer_code + 1})
         return res
