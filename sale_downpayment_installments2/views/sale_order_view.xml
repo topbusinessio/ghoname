@@ -4,14 +4,14 @@
         <field name="model">sale.order</field>
         <field name="inherit_id" ref="sale.view_order_form"/>
         <field name="arch" type="xml">
-            <xpath expr="//form[1]/sheet[1]/notebook[1]" position="inside">
-                <!-- ======================== -->
-                <!-- Hidden Technical Fields -->
-                <!-- ======================== -->
-                <field name="payment_type" invisible="1"/>
-                <field name="show_installment_section" invisible="1"/>
-                <field name="down_payment_locked" invisible="1"/>
+            <xpath expr="//page[@name='order_lines']" position="after">
                 <page string="Installment" name="installment" invisible="not show_installment_section">
+                    <!-- ======================== -->
+                    <!-- Hidden Technical Fields -->
+                    <!-- ======================== -->
+                    <field name="payment_type" invisible="1"/>
+                    <field name="show_installment_section" invisible="1"/>
+                    <field name="down_payment_locked" invisible="1"/>
                     <group>
                         <!-- ======================== -->
                         <!-- Down Payment Section -->
@@ -26,23 +26,20 @@
                         <!-- Installment Plan Section -->
                         <!-- ======================== -->
                         <group string="Installment Plan">
-                            <group colspan="2">
+                            <group colspan="2" invisible="down_payment_locked">
                                 <field name="installment_start_date" readonly="down_payment_locked"/>
                                 <field name="first_installment_amount" readonly="down_payment_locked"/>
                                 <field name="installment_months" readonly="down_payment_locked"/>
                                 <field name="installment_breakdown" readonly="1" colspan="2"/>
                             </group>
-                            <separator string="Installment Schedule" colspan="2" invisible="not down_payment_locked"/>
                             <field name="installment_ids" readonly="1" colspan="2" invisible="not down_payment_locked">
                                 <tree string="Installment Schedule" editable="false">
                                     <field name="installment_number" string="#"/>
                                     <field name="amount" string="Amount"/>
                                     <field name="due_date"/>
-                                    <field name="payment_status" string="Status"/>
                                     <field name="amount_paid"/>
                                     <field name="amount_remaining" string="Balance"/>
                                     <field name="invoice_id"/>
-                                    <field name="locked" invisible="1"/>
                                 </tree>
                             </field>
                             <!-- ======================== -->

@@ -11,9 +11,7 @@
     'author': 'Ghonim Moon Ltd',
     'data': [
         'security/ir.model.access.csv',
-        #'data/customer_code_sequence.xml',  # ✅ Add this line
         'views/sale_order_view.xml',
-        #'views/partner_views.xml',          # ✅ (If you have view code for res.partner, add it too)
     ],
     'installable': True,
     'application': True,
