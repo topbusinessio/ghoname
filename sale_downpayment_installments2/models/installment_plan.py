@@ -16,10 +16,10 @@ class InstallmentPlan(models.Model):
         ondelete='cascade',
         required=True
     )
+
     installment_number = fields.Integer(string="Installment No.")
     amount = fields.Monetary(string="Installment Amount", required=True)
     due_date = fields.Date(string="Due Date", required=True)
-    paid = fields.Boolean(string="Paid", default=False)
 
     # 💰 Currency
     currency_id = fields.Many2one(
@@ -28,10 +28,10 @@ class InstallmentPlan(models.Model):
         store=True
     )
 
-    # 🔒 Lock installments once generated
+    # 🔒 Locked once generated
     locked = fields.Boolean(string="Locked", default=False, readonly=True)
 
-    # 🧾 Link to generated invoice
+    # 🧾 Linked Invoice
     invoice_id = fields.Many2one(
         'account.move',
         string="Invoice",
@@ -40,14 +40,29 @@ class InstallmentPlan(models.Model):
         help="The customer invoice automatically created for this installment."
     )
 
-    # 📊 Payment status tracking
+    # 💵 Dynamic Payment Tracking
+    amount_paid = fields.Monetary(
+        string="Amount Paid",
+        compute="_compute_invoice_payment",
+        store=True,
+        currency_field="currency_id"
+    )
+
+    amount_remaining = fields.Monetary(
+        string="Amount Remaining",
+        compute="_compute_invoice_payment",
+        store=True,
+        currency_field="currency_id"
+    )
+
+    # 📊 Auto Payment Status (computed)
     payment_status = fields.Selection(
         [
+            ('pending', 'Pending'),
             ('paid', 'Paid'),
-            ('due', 'Due'),
             ('overdue', 'Overdue')
         ],
-        string='Status',
+        string='Payment Status',
         compute='_compute_payment_status',
         store=True
     )
@@ -55,17 +70,35 @@ class InstallmentPlan(models.Model):
     # -----------------------------
     # Computations
     # -----------------------------
-    @api.depends('paid', 'due_date')
+    @api.depends('invoice_id.payment_state', 'due_date', 'amount_remaining')
     def _compute_payment_status(self):
-        """Compute payment status based on due date and paid flag."""
+        """Compute real-time payment status based on invoice + due date."""
         today = date.today()
-        for record in self:
-            if record.paid:
-                record.payment_status = 'paid'
-            elif record.due_date and record.due_date < today:
-                record.payment_status = 'overdue'
+        for rec in self:
+            if not rec.invoice_id:
+                rec.payment_status = 'pending'
+                continue
+
+            invoice = rec.invoice_id
+
+            if invoice.payment_state == 'paid' or rec.amount_remaining == 0:
+                rec.payment_status = 'paid'
+            elif rec.due_date and rec.due_date < today and rec.amount_remaining > 0:
+                rec.payment_status = 'overdue'
             else:
-                record.payment_status = 'due'
+                rec.payment_status = 'pending'
+
+    @api.depends('invoice_id.amount_total', 'invoice_id.amount_residual', 'invoice_id.payment_state')
+    def _compute_invoice_payment(self):
+        """Automatically track how much has been paid for this installment."""
+        for rec in self:
+            if rec.invoice_id:
+                invoice = rec.invoice_id
+                rec.amount_paid = invoice.amount_total - invoice.amount_residual
+                rec.amount_remaining = invoice.amount_residual
+            else:
+                rec.amount_paid = 0.0
+                rec.amount_remaining = rec.amount
 
     # -----------------------------
     # Behavior
@@ -77,3 +110,17 @@ class InstallmentPlan(models.Model):
         for rec in records:
             rec.locked = True
         return records
+
+    def action_open_invoice(self):
+        """Convenience action to quickly open the linked invoice."""
+        for rec in self:
+            if not rec.invoice_id:
+                continue
+            return {
+                'name': 'Installment Invoice',
+                'type': 'ir.actions.act_window',
+                'view_mode': 'form',
+                'res_model': 'account.move',
+                'res_id': rec.invoice_id.id,
+                'target': 'current',
+            }
