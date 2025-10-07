@@ -3,7 +3,6 @@ import logging
 
 _logger = logging.getLogger(__name__)
 
-
 class AccountPayment(models.Model):
     _inherit = "account.payment"
 
@@ -14,82 +13,63 @@ class AccountPayment(models.Model):
     )
 
     def action_post(self):
-        """Override with error handling"""
-        print("Auto Reconcile: action_post called")
+        """Override action_post to auto-assign invoices after posting"""
         result = super().action_post()
 
-        for payment in self:
-            if (
-                payment.auto_assign_invoices
-                and payment.payment_type == "inbound"
-                and not payment.reconciled_invoice_ids
-            ):
-                try:
-                    print(
-                        f"Auto Reconcile: Attempting to auto-assign invoices for payment {payment.name}"
-                    )
-                    payment._auto_assign_invoices()
-                except Exception as e:
-                    _logger.error(
-                        f"Auto-assignment failed in action_post for {payment.name}: {str(e)}"
-                    )
+        payments_to_assign = self.filtered(
+            lambda p: (
+                p.auto_assign_invoices
+                and p.payment_type == "inbound"
+                and not p.reconciled_invoice_ids
+            )
+        )
+
+        for payment in payments_to_assign:
+            try:
+                payment._auto_assign_invoices()
+            except Exception as e:
+                _logger.error(
+                    f"Auto-assignment failed for {payment.name}: {str(e)}"
+                )
+
         return result
 
     def _auto_assign_invoices(self):
-        """Auto-assign payment to oldest unpaid invoices using js_assign_outstanding_line"""
-        for payment in self:
-            if payment.payment_type != "inbound" or payment.state != "posted":
-                continue
+        """Auto-assign payment to oldest unpaid invoices"""
+        unpaid_invoices = self._get_unpaid_invoices()
+        if not unpaid_invoices:
+            _logger.info(f"No unpaid invoices found for {self.partner_id.name}")
+            return
 
+        payment_line = self.line_ids.filtered(
+            lambda line: (
+                line.account_id.account_type == "asset_receivable" 
+                and not line.reconciled
+            )
+        )
+
+        if not payment_line:
+            _logger.warning(f"No receivable line found for payment {self.name}")
+            return
+
+        assigned_count = 0
+        for invoice in unpaid_invoices:
+            if payment_line.reconciled:
+                break
             try:
-                unpaid_invoices = self._get_unpaid_invoices(payment)
-                if not unpaid_invoices:
-                    _logger.info(
-                        f"No unpaid invoices found for {payment.partner_id.name}"
-                    )
-                    continue
-
-                # In Odoo 17, use account_type instead of internal_type
-                payment_line = payment.line_ids.filtered(
-                    lambda line: line.account_id.account_type == "asset_receivable"
-                    and not line.reconciled
-                )
-
-                if not payment_line:
-                    _logger.warning(
-                        f"No receivable line found for payment {payment.name}"
-                    )
-                    continue
-
-                # Assign to invoices using Odoo's JS method
-                assigned_count = 0
-                for invoice in unpaid_invoices:
-                    if payment_line.reconciled:
-                        break
-                    try:
-                        invoice.js_assign_outstanding_line(payment_line.id)
-                        assigned_count += 1
-                        _logger.info(f"Assigned payment to invoice {invoice.name}")
-                    except Exception as e:
-                        _logger.warning(
-                            f"Failed to assign invoice {invoice.name}: {str(e)}"
-                        )
-                        break
-
-                _logger.info(
-                    f"Successfully assigned payment {payment.name} to {assigned_count} invoices"
-                )
-
+                invoice.js_assign_outstanding_line(payment_line.id)
+                assigned_count += 1
             except Exception as e:
-                _logger.error(
-                    f"Auto-assignment failed for payment {payment.name}: {str(e)}"
-                )
+                _logger.warning(f"Failed to assign invoice {invoice.name}: {str(e)}")
+                break
 
-    def _get_unpaid_invoices(self, payment):
+        _logger.info(f"Assigned payment {self.name} to {assigned_count} invoices")
+
+    def _get_unpaid_invoices(self):
         """Get unpaid invoices for the partner, sorted by date (oldest first)"""
         return self.env["account.move"].search(
             [
-                ("partner_id", "=", payment.partner_id.id),
+                ("partner_id", "=", self.partner_id.id),
                 ("move_type", "=", "out_invoice"),
                 ("state", "=", "posted"),
                 ("payment_state", "in", ["not_paid", "partial"]),

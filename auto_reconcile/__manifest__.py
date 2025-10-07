@@ -8,7 +8,7 @@
     """,
     'author': 'Ewetoye Ibrahim',
     'license': 'OPL-1',
-    'depends': ['account_payment'],
+    'depends': ['account_payment', 'opay_wallet'],
     # 'data': [
     #     'views.xml',
     # ],
