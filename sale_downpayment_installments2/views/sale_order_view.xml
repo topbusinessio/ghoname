@@ -4,80 +4,61 @@
         <field name="model">sale.order</field>
         <field name="inherit_id" ref="sale.view_order_form"/>
         <field name="arch" type="xml">
-
-            <xpath expr="//sheet" position="inside">
-
+            <xpath expr="//form[1]/sheet[1]/notebook[1]" position="inside">
                 <!-- ======================== -->
-                <!-- ⚙️ Hidden Technical Fields -->
+                <!-- Hidden Technical Fields -->
                 <!-- ======================== -->
                 <field name="payment_type" invisible="1"/>
                 <field name="show_installment_section" invisible="1"/>
                 <field name="down_payment_locked" invisible="1"/>
-
-                <!-- ======================== -->
-                <!-- 💰 Down Payment Section -->
-                <!-- ======================== -->
-                <group string="Down Payment"
-                       invisible="payment_type != 'installment'">
-                    <separator string="Down Payment Details" colspan="2"/>
-
-                    <group col="2">
-                        <field name="down_payment_required" readonly="down_payment_locked"/>
-                        <field name="down_payment_paid_now" readonly="down_payment_locked"/>
-                        <field name="next_down_payment_amount" readonly="1"/>
-                        <field name="down_payment_due_date" readonly="down_payment_locked"/>
+                <page string="Installment" name="installment" invisible="not show_installment_section">
+                    <group>
+                        <!-- ======================== -->
+                        <!-- Down Payment Section -->
+                        <!-- ======================== -->
+                        <group string="Down Payment">
+                            <field name="down_payment_required" readonly="down_payment_locked"/>
+                            <field name="down_payment_paid_now" readonly="down_payment_locked"/>
+                            <field name="next_down_payment_amount" readonly="1"/>
+                            <field name="down_payment_due_date" readonly="down_payment_locked"/>
+                        </group>
+                        <!-- ======================== -->
+                        <!-- Installment Plan Section -->
+                        <!-- ======================== -->
+                        <group string="Installment Plan">
+                            <group colspan="2">
+                                <field name="installment_start_date" readonly="down_payment_locked"/>
+                                <field name="first_installment_amount" readonly="down_payment_locked"/>
+                                <field name="installment_months" readonly="down_payment_locked"/>
+                                <field name="installment_breakdown" readonly="1" colspan="2"/>
+                            </group>
+                            <separator string="Installment Schedule" colspan="2" invisible="not down_payment_locked"/>
+                            <field name="installment_ids" readonly="1" colspan="2" invisible="not down_payment_locked">
+                                <tree string="Installment Schedule" editable="false">
+                                    <field name="installment_number" string="#"/>
+                                    <field name="amount" string="Amount"/>
+                                    <field name="due_date"/>
+                                    <field name="payment_status" string="Status"/>
+                                    <field name="amount_paid"/>
+                                    <field name="amount_remaining" string="Balance"/>
+                                    <field name="invoice_id"/>
+                                    <field name="locked" invisible="1"/>
+                                </tree>
+                            </field>
+                            <!-- ======================== -->
+                            <!-- Payment Summary -->
+                            <!-- ======================== -->
+                            <separator string="Payment Summary" colspan="2"/>
+                            <group col="2">
+                                <field name="total_paid" readonly="1"/>
+                                <field name="remaining_payment" readonly="1"/>
+                            </group>
+                            <div invisible="down_payment_locked" colspan="2" class="text-center">
+                                <button name="action_register_down_payment" string="Register Down Payment &amp; Generate Installments" type="object" class="btn btn-primary oe_highlight"/>
+                            </div>
+                        </group>
                     </group>
-
-                    <div class="oe_right oe_button_box" invisible="down_payment_locked">
-                        <button name="action_register_down_payment"
-                                string="Register Down Payment &amp; Generate Installments"
-                                type="object"
-                                class="btn btn-primary oe_highlight"
-                                style="margin-top: 10px; width: 350px;"/>
-                    </div>
-                </group>
-
-                <!-- ======================== -->
-                <!-- 📅 Installment Plan Section -->
-                <!-- ======================== -->
-                <group string="Installment Plan"
-                       invisible="payment_type != 'installment'">
-
-                    <separator string="Installment Configuration" colspan="2"/>
-
-                    <group col="2">
-                        <field name="installment_start_date" readonly="down_payment_locked"/>
-                        <field name="first_installment_amount" readonly="down_payment_locked"/>
-                        <field name="installment_months" readonly="down_payment_locked"/>
-                        <field name="installment_breakdown" readonly="1" colspan="2"/>
-                    </group>
-
-                    <separator string="Installment Schedule" colspan="2"/>
-
-                    <field name="installment_ids" readonly="1" colspan="2">
-                        <tree string="Installment Schedule" editable="false">
-                            <field name="installment_number"/>
-                            <field name="amount"/>
-                            <field name="due_date"/>
-                            <field name="payment_status"/>
-                            <field name="amount_paid"/>
-                            <field name="amount_remaining"/>
-                            <field name="invoice_id"/>
-                            <field name="locked" invisible="1"/>
-                        </tree>
-                    </field>
-
-                    <!-- ======================== -->
-                    <!-- 💵 Payment Summary -->
-                    <!-- ======================== -->
-                    <separator string="Payment Summary" colspan="2"/>
-
-                    <group col="2">
-                        <field name="total_paid" readonly="1"/>
-                        <field name="remaining_payment" readonly="1"/>
-                    </group>
-                </group>
-
+                </page>
             </xpath>
         </field>
     </record>
