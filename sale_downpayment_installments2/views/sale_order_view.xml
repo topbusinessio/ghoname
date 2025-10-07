@@ -10,47 +10,56 @@
                 <!-- Hidden helper fields -->
                 <field name="payment_type" invisible="1"/>
                 <field name="show_installment_section" invisible="1"/>
+                <field name="down_payment_locked" invisible="1"/>
 
-                <!-- Down Payment Section -->
-                <group invisible="not show_installment_section">
-                    <separator string="Down Payment"/>
-                    <field name="down_payment_required"/>
-                    <field name="down_payment_paid_now"/>
+                <!-- ======================== -->
+                <!-- 💰 Down Payment Section -->
+                <!-- ======================== -->
+                <group string="Down Payment"
+                       invisible="not show_installment_section"
+                       name="down_payment_section"
+                       col="2">
+                    <separator string="Down Payment Details" colspan="2"/>
+
+                    <field name="down_payment_required" readonly="down_payment_locked"/>
+                    <field name="down_payment_paid_now" readonly="down_payment_locked"/>
                     <field name="next_down_payment_amount" readonly="1"/>
-                    <field name="down_payment_due_date"/>
-                    <field name="is_down_payment_complete"/>
+                    <field name="down_payment_due_date" readonly="down_payment_locked"/>
 
-                    <div class="oe_button_box" name="button_box">
+                    <div class="oe_right oe_button_box" invisible="down_payment_locked">
                         <button name="action_register_down_payment"
-                                string="Register Down Payment"
+                                string="Register Down Payment &amp; Generate Installments"
                                 type="object"
-                                class="btn btn-primary"
-                                style="width: 200px;"/>
+                                class="btn btn-primary oe_highlight"
+                                style="margin-top: 10px; width: 350px;"/>
                     </div>
                 </group>
 
-                <!-- Installment Plan Section -->
-                <group invisible="not show_installment_section">
-                    <separator string="Installment Plan"/>
-                    <field name="installment_start_date"/>
-                    <field name="first_installment_amount"/>
-                    <field name="installment_months"/>
-                    <field name="installment_breakdown" readonly="1"/>
+                <!-- ======================== -->
+                <!-- 📅 Installment Plan Section -->
+                <!-- ======================== -->
+                <group string="Installment Plan"
+                       invisible="not show_installment_section"
+                       name="installment_plan_section"
+                       col="2">
 
-                    <div class="oe_button_box" name="button_box">
-                        <button name="action_generate_installments"
-                                string="Generate Installments"
-                                type="object"
-                                class="btn btn-success"
-                                style="width: 200px;"/>
-                    </div>
+                    <separator string="Installment Configuration" colspan="2"/>
 
-                    <field name="installment_ids">
-                        <tree editable="bottom">
-                            <field name="installment_number" readonly="1"/>
+                    <field name="installment_start_date" readonly="down_payment_locked"/>
+                    <field name="first_installment_amount" readonly="down_payment_locked"/>
+                    <field name="installment_months" readonly="down_payment_locked"/>
+                    <field name="installment_breakdown" readonly="1" colspan="2"/>
+
+                    <separator string="Installment Schedule" colspan="2"/>
+
+                    <field name="installment_ids" readonly="1" colspan="2">
+                        <tree editable="false">
+                            <field name="installment_number"/>
                             <field name="amount"/>
                             <field name="due_date"/>
                             <field name="paid"/>
+                            <field name="invoice_id"/>
+                            <field name="locked" invisible="1"/>
                         </tree>
                     </field>
                 </group>
@@ -59,3 +68,4 @@
         </field>
     </record>
 </odoo>
+
