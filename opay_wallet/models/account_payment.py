@@ -1,9 +1,5 @@
 from odoo import models, fields, api
 
-class AccountPaymentMethod(models.Model):
-    _inherit = 'account.payment.method'
-    is_opay = fields.Boolean(string='Is OPay')
-
 class AccountPayment(models.Model):
     _inherit = 'account.payment'
     # Add OPay specific fields

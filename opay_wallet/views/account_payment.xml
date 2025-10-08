@@ -6,8 +6,8 @@
         <field name="inherit_id" ref="account.view_account_payment_search"/>
         <field name="arch" type="xml">
             <xpath expr="//search" position="inside">
-                <filter string="OPay Payments" name="opay_payments" 
-                        domain="[('payment_method_id.is_opay', '=', True)]"/>
+                <filter string="OPay API Payments" name="opay_payments" 
+                        domain="[('opay_merchant_id', '!=', False)]"/>
             </xpath>
         </field>
     </record>
@@ -19,7 +19,7 @@
         <field name="arch" type="xml">
             <xpath expr="//group[@name='main_group']" position="after">
                 <field name="payment_method_id" invisible="1"/>
-                <group string="OPay Details"  name="opay_payment" invisible="payment_method_id.is_opay">
+                <group string="OPay Details"  name="opay_payment" invisible="not opay_merchant_id" readonly="1">
                     <group>
                         <field name="opay_order_no"/>
                         <field name="opay_notes"/>

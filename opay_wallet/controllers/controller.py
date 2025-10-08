@@ -139,7 +139,6 @@ class OPayWebhookController(http.Controller):
                 .create(
                     {
                         "name": "OPay",
-                        "is_opay": True,
                         "code": "opay",
                         "payment_type": "inbound",
                     }
