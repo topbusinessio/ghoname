@@ -32,7 +32,7 @@
     'depends': ['sale_management'],
     'data': [
         'views/res_company_views.xml',
-        'views/res_partner_views.xml',
+        # 'views/res_partner_views.xml',
     ],
     'images': ['static/description/banner.png'],
     'license': 'AGPL-3',
